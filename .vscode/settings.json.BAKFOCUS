@@ -1,0 +1,25 @@
+// Workspace settings
+{
+    // The following will hide the js and map files in the editor
+    "files.exclude": {
+        "**/**.ruff**":true,
+        "**/**pycache**": true,
+        "**/**.ipynb_checkpoints**": true,
+        "**/**tests**":true,
+        "**/**schema_types**":true,
+        "**/**email-templates**":true,
+        "**/**core**":true,
+        "**/db":true,
+        "imports":true,
+        ".flake8":true,
+        ".python-version":true,
+        "alembic.ini":true,
+        "mypy.ini":true,
+        "poetry.lock":true,
+        "pyproject.toml":true,
+        "prestart.sh":true,
+        "worker-start.sh":true,
+        "**scripts**":true
+
+    }
+}
