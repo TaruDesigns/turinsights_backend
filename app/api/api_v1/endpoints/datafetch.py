@@ -1,15 +1,13 @@
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, HTTPException
 from uipath_orchestrator_rest.rest import ApiException
 
 import app.worker.uipath
 from app import crud, schemas
-from app.api import deps
 from app.core.celery_app import celery_app
-from app.worker.uipath import FetchUIPathToken, GetUIPathToken
+from app.worker.uipath import FetchUIPathToken
 
 router = APIRouter()
 
@@ -47,40 +45,23 @@ def fetchfolders(
     return {"msg": "Request accepted"}
 
 
-@router.get("/folders", response_model=None, status_code=201)
-def getfolders(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get folders from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        Standard OData Queries
-
-    Returns:
-        results: List of Folders (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_folder.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_folder.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
+def validate_folderlist(formdata: schemas.UIPFetchPostBody) -> list[int]:
+    # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
+    if not formdata.folderlist or formdata.folderlist == [0]:
+        with app.worker.uipath.get_db() as db:
+            folderlist = crud.uip_folder.get_multi(db=db, skip=0, limit=100)
+            formdata.folderlist = [fol.Id for fol in folderlist]
+    return formdata.folderlist
 
 
 # -------------------------------
 # ---------------Jobs------------
 # -------------------------------
 @router.post("/jobs", response_model=None, status_code=201)
-def fetchjobs(formdata: schemas.UIPFetchPostBody) -> Any:
+def fetchjobs(
+    formdata: schemas.UIPFetchPostBody,
+    folderlist: list[int] = Depends(validate_folderlist),
+) -> Any:
     """Get Jobs and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -90,16 +71,13 @@ def fetchjobs(formdata: schemas.UIPFetchPostBody) -> Any:
     Returns:
         results: List of Jobs (Pydantic models)
     """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
+
     try:
         kwargs = {
             "fulldata": formdata.fulldata,
             "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
+            "filter": formdata.filter,
+            "folderlist": folderlist,
         }
         celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
     except ApiException as e:
@@ -113,40 +91,14 @@ def fetchjobs(formdata: schemas.UIPFetchPostBody) -> Any:
     return {"msg": "Request accepted"}
 
 
-@router.get("/jobs", response_model=None, status_code=201)
-def getjobs(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get folders from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        Standard OData Queries
-
-    Returns:
-        results: List of Jobs (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_job.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_job.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
-
-
 # -------------------------------
 # ------------Processes---------
 # -------------------------------
 @router.post("/processes", response_model=None, status_code=201)
-def fetchprocesses(formdata: schemas.UIPFetchPostBody) -> Any:
+def fetchprocesses(
+    formdata: schemas.UIPFetchPostBody,
+    folderlist: list[int] = Depends(validate_folderlist),
+) -> Any:
     """Get Processes and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -156,16 +108,12 @@ def fetchprocesses(formdata: schemas.UIPFetchPostBody) -> Any:
     Returns:
         results: List of Processes (Pydantic models)
     """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
     try:
         kwargs = {
             "fulldata": formdata.fulldata,
             "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
+            "filter": formdata.filter,
+            "folderlist": folderlist,
         }
         celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
     except ApiException as e:
@@ -181,40 +129,14 @@ def fetchprocesses(formdata: schemas.UIPFetchPostBody) -> Any:
     return {"msg": "Request accepted"}
 
 
-@router.get("/processes", response_model=None, status_code=201)
-def getprocesses(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get Processes from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        Standard OData Queries
-
-    Returns:
-        results: List of Processes (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_process.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_process.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
-
-
 # -------------------------------
 # ----------QueueDefinitions---
 # -------------------------------
 @router.post("/queuedefinitions", response_model=None, status_code=201)
-def fetchqueuedefinitions(formdata: schemas.UIPFetchPostBody) -> Any:
+def fetchqueuedefinitions(
+    formdata: schemas.UIPFetchPostBody,
+    folderlist: list[int] = Depends(validate_folderlist),
+) -> Any:
     """Get Queue Definitions and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -224,16 +146,12 @@ def fetchqueuedefinitions(formdata: schemas.UIPFetchPostBody) -> Any:
     Returns:
         results: List of QueueDefinitions (Pydantic models)
     """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
     try:
         kwargs = {
             "fulldata": formdata.fulldata,
             "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
+            "filter": formdata.filter,
+            "folderlist": folderlist,
         }
         celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
     except ApiException as e:
@@ -251,40 +169,14 @@ def fetchqueuedefinitions(formdata: schemas.UIPFetchPostBody) -> Any:
     return {"msg": "Request accepted"}
 
 
-@router.get("/queuedefinitions", response_model=None, status_code=201)
-def getqueuedefinitions(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get queuedefinitions from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        Standard OData Queries
-
-    Returns:
-        results: List of QueueDefinitions (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_queue_definitions.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_queue_definitions.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
-
-
 # -------------------------------
 # -------QueueItems--------------
 # -------------------------------
 @router.post("/queueitems", response_model=None, status_code=201)
-def fetchqueueitems(formdata: schemas.UIPFetchPostBody) -> Any:
+def fetchqueueitems(
+    formdata: schemas.UIPFetchPostBody,
+    folderlist: list[int] = Depends(validate_folderlist),
+) -> Any:
     """Get QueueItems and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -294,16 +186,12 @@ def fetchqueueitems(formdata: schemas.UIPFetchPostBody) -> Any:
     Returns:
         results: List of QueueItems (Pydantic models)
     """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
     try:
         kwargs = {
             "fulldata": formdata.fulldata,
             "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
+            "filter": formdata.filter,
+            "folderlist": folderlist,
         }
         celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
     except ApiException as e:
@@ -319,40 +207,14 @@ def fetchqueueitems(formdata: schemas.UIPFetchPostBody) -> Any:
     return {"msg": "Request accepted"}
 
 
-@router.get("/queueitems", response_model=None, status_code=201)
-def getqueueitems(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get folders from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        Standard OData Queries
-
-    Returns:
-        results: List of QueueItems (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_queue_item.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_queue_item.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
-
-
 # -------------------------------
 # -------QueueItemEvents-----------
 # -------------------------------
 @router.post("/queueitemevents", response_model=None, status_code=201)
-def fetchqueueitemevents(formdata: schemas.UIPFetchPostBody) -> Any:
+def fetchqueueitemevents(
+    formdata: schemas.UIPFetchPostBody,
+    folderlist: list[int] = Depends(validate_folderlist),
+) -> Any:
     """Get Queue Item Events and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -362,16 +224,12 @@ def fetchqueueitemevents(formdata: schemas.UIPFetchPostBody) -> Any:
     Returns:
         results: List of QueueItemEvents (Pydantic models)
     """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
     try:
         kwargs = {
             "fulldata": formdata.fulldata,
             "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
+            "filter": formdata.filter,
+            "folderlist": folderlist,
         }
         celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
     except ApiException as e:
@@ -387,39 +245,14 @@ def fetchqueueitemevents(formdata: schemas.UIPFetchPostBody) -> Any:
     return {"msg": "Request accepted"}
 
 
-@router.get("/queueitemevents", response_model=None, status_code=201)
-def getqueueitemevents(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get queueitemevents from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        Standard OData Queries
-    Returns:
-        results: List of QueueItemEvents (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_queue_item_event.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_queue_item_event.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
-
-
 # -------------------
 # -----------Sessions
 # --------------------
 @router.post("/sessions", response_model=None, status_code=201)
-def fetchsessions(formdata: schemas.UIPFetchPostBody) -> Any:
+def fetchsessions(
+    formdata: schemas.UIPFetchPostBody,
+    folderlist: list[int] = Depends(validate_folderlist),
+) -> Any:
     """Get sessions and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -429,16 +262,12 @@ def fetchsessions(formdata: schemas.UIPFetchPostBody) -> Any:
     Returns:
         sessions: List of sessions (Pydantic models)
     """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
     try:
         kwargs = {
             "fulldata": formdata.fulldata,
             "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
+            "filter": formdata.filter,
+            "folderlist": folderlist,
         }
         celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
     except ApiException as e:
@@ -452,35 +281,6 @@ def fetchsessions(formdata: schemas.UIPFetchPostBody) -> Any:
             status_code=409, detail="Could not update database: Sessions"
         )
     return {"msg": "Request accepted"}
-
-
-@router.get("/sessions", response_model=None, status_code=201)
-def getsessions(
-    filter: Optional[str] = Query(None),
-    select: Optional[str] = Query(None),
-    top: Optional[int] = Query(100),
-    skip: Optional[int] = Query(0),
-    db: Session = Depends(deps.get_db),
-) -> Any:
-    """Get Sessions from DB
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        OData Queries
-
-    Returns:
-       sessions: List of sessions (Pydantic models)
-    """
-    if filter:
-        try:
-            return crud.uip_session.get_odata(db=db, filter=filter)
-        except Exception as e:
-            raise HTTPException(status_code=401, detail="Invalid OData Query")
-    else:
-        try:
-            return crud.uip_session.get_multi(db=db, skip=skip, limit=top)
-        except Exception as e:
-            raise HTTPException(status_code=503, detail="Error retrieving data")
 
 
 # --------------------------------
@@ -506,26 +306,6 @@ def fetchtoken() -> schemas.UIPathTokenResponse:
             detail="Could not request data to UIPath. Not authenticated",
         )
     return resp
-
-
-@router.get("/auth", response_model=None, status_code=200)
-def gettoken() -> Any:
-    """Get valid auth Token from DB
-
-    Args:
-        db (Session, optional): _description_. Defaults to Depends(deps.get_db).
-
-    Returns:
-        token: string with the access token
-    """
-    try:
-        token = GetUIPathToken()
-    except Exception as e:
-        logging.error(f"Exception when getting token from database {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not retrieve token from database."
-        )
-    return token
 
 
 @router.get("/teststuff", response_model=None, status_code=200)

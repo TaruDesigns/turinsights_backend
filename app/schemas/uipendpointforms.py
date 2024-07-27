@@ -12,8 +12,8 @@ class ODataForm(BaseModel):
 
 
 class UIPFetchPostBody(BaseModel):
-    cruddb: bool = False
-    upsert: bool = False
+    cruddb: bool = True
+    upsert: bool = True
     fulldata: bool = False
-    filter: Optional[str]
+    filter: Optional[str] = None
     folderlist: Optional[List[int]]
