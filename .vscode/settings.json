@@ -1,8 +1,8 @@
 // Workspace settings
 {
     // The following will hide the js and map files in the editor
-    //"files.exclude": {
-    "hahaha":{
+    "files.exclude": {
+    //"hahaha":{
         "**/**.ruff**":true,
         "**/**pycache**": true,
         "**/**.ipynb_checkpoints**": true,
@@ -20,7 +20,10 @@
         "pyproject.toml":true,
         "prestart.sh":true,
         "worker-start.sh":true,
-        "**scripts**":true
-
+        "**scripts**":true,
+        //"**dockerfile**":true,
+        "docker-compose.yml":true,
+        ".dockerignore":true,
+        ".env.example":true
     }
 }

@@ -17,8 +17,8 @@ if settings.DEBUG_MODE:
     try:
         debugpy.listen(("0.0.0.0", 5678))
         sleep(5)
-    except:
-        print("Already set a remote debugger!")
+    except Exception as e:
+        print(f"Already set a remote debugger!: {e}")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -37,6 +37,14 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+from fastapi.responses import RedirectResponse
+
+
+@app.get("/")
+async def redirect_typer():
+    return RedirectResponse("/docs")
 
 
 @app.on_event("startup")

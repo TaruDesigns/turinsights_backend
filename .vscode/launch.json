@@ -12,6 +12,15 @@
             "console": "integratedTerminal",
             "justMyCode": true
         },
+
+        {
+            "name": "Python: Main through uvicorn",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },        
         {
             "name": "Backend Remote",
             "type": "python",

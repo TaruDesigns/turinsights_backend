@@ -1,6 +1,7 @@
-from typing import Any, Optional
 import datetime
+import logging
 from enum import IntEnum, unique
+from typing import Any, Optional
 
 from odata_query.sqlalchemy import apply_odata_query
 from sqlalchemy import select
@@ -63,7 +64,14 @@ class CRUDSyncTimes(
     ]
 ):
     def get_queueitemevent(self, db: Session) -> datetime.datetime:
-        return self.get(db=db, id=TrackingKeys.QueueItemEvents).TimeStamp
+        try:
+            timestamp = self.get(db=db, id=TrackingKeys.QueueItemEvents).TimeStamp
+        except Exception as e:
+            logging.error(
+                f"No Synctime found for QueueItemEvents, defaulting to MinTime"
+            )
+            timestamp = datetime.datetime.min
+        return timestamp
 
     def update_queueitemevent(self, db: Session, newtime: datetime.datetime) -> None:
         schematoupdate = trackschemas.SyncTimes(
@@ -72,8 +80,6 @@ class CRUDSyncTimes(
             Description="QueueItemEvents",
         )
         return self.upsert(db=db, obj_in=schematoupdate)
-
-    # TODO: JobStartTimes and all that
 
 
 tracked_process = CRUDTrackedProcess(uipmodels.TrackedProcess)
