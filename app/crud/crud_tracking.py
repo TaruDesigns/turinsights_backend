@@ -70,7 +70,7 @@ class CRUDSyncTimes(
             logging.error(
                 f"No Synctime found for QueueItemEvents, defaulting to MinTime"
             )
-            timestamp = datetime.datetime.min
+            timestamp = datetime.datetime(2016, 1, 1)
         return timestamp
 
     def update_queueitemevent(self, db: Session, newtime: datetime.datetime) -> None:
@@ -85,10 +85,8 @@ class CRUDSyncTimes(
         try:
             timestamp = self.get(db=db, id=TrackingKeys.QueueItemsNew).TimeStamp
         except Exception as e:
-            logging.error(
-                f"No Synctime found for QueueItemEvents, defaulting to MinTime"
-            )
-            timestamp = datetime.datetime.min
+            logging.error(f"No Synctime found for QueueItemsNew, defaulting to MinTime")
+            timestamp = datetime.datetime(2016, 1, 1)
         return timestamp
 
     def update_queueitemnew(self, db: Session, newtime: datetime.datetime) -> None:
@@ -103,15 +101,13 @@ class CRUDSyncTimes(
         try:
             timestamp = self.get(db=db, id=TrackingKeys.JobsStarted).TimeStamp
         except Exception as e:
-            logging.error(
-                f"No Synctime found for QueueItemEvents, defaulting to MinTime"
-            )
-            timestamp = datetime.datetime.min
+            logging.error(f"No Synctime found for Jobs Started, defaulting to MinTime")
+            timestamp = datetime.datetime(2016, 1, 1)
         return timestamp
 
     def update_jobsstarted(self, db: Session, newtime: datetime.datetime) -> None:
         schematoupdate = trackschemas.SyncTimes(
-            id=int(TrackingKeys.QueueItemEvents),
+            id=int(TrackingKeys.JobsStarted),
             TimeStamp=newtime,
             Description="JobsStarted",
         )

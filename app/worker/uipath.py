@@ -5,7 +5,9 @@ from datetime import datetime
 from enum import StrEnum, unique
 from typing import Any, Generator, List, Optional
 
+from celery import Task
 from celery.exceptions import Ignore
+from celery.signals import after_setup_task_logger
 
 # Third-Party Imports
 from raven import Client
@@ -39,14 +41,11 @@ from app.db.session import SessionLocal, get_db
 client_sentry = Client(settings.SENTRY_DSN)
 
 
-class FilterSpecialValues(StrEnum):
-    """Enum for some "special coded values" on the "filter" string for the Celery tasks.
-    These are used to modify behavior of the function
-    Args:
-        StrEnum (_type_): _description_
-    """
+from celery.app import trace
 
-    SYNC = "SYNC"
+trace.LOG_SUCCESS = """\
+Task %(name)s[%(id)s] succeeded in %(runtime)ss\
+"""
 
 
 def _CRUDHelper(
@@ -133,7 +132,7 @@ def FetchUIPathToken(uipclient_config=uipclient_config) -> schemas.UIPathTokenRe
     with get_db() as db:
         crud.uipath_token.create(db=db, obj_in=tokenresponse)
     logging.info("Token Updated")
-    return tokenresponse
+    return "Token Updated"
 
 
 @celery_app.task(acks_late=True)
@@ -213,7 +212,7 @@ def fetchjobs(
         if synctimes:
             lastsynctime = tracked_synctimes.get_jobsstarted(db=db)
             filter = (
-                f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
+                f"CreationTime gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             )
             task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
@@ -242,7 +241,7 @@ def fetchjobs(
     logging.info("Jobs refreshed")
     if synctimes:
         tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
-        logging.info(f"Job InfoSuccesfully synced: '{filter}'")
+        logging.info(f"Job Info Succesfully synced: '{filter}'")
     return results
 
 
@@ -399,7 +398,9 @@ def fetchqueueitems(
         if synctimes:
             lastsynctime = tracked_synctimes.get_queueitemnew(db=db)
             filter = (
-                f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
+                f"StartProcessing gt {lastsynctime.isoformat()}Z"
+                if lastsynctime
+                else None
             )
             task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
@@ -467,7 +468,7 @@ def fetchqueueitemevents(
         select = objSchema.get_select_filter()
         results = []
         if synctimes:
-            lastsynctime = tracked_synctimes.get_queueitemnew(db=db)
+            lastsynctime = tracked_synctimes.get_queueitemevent(db=db)
             filter = (
                 f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             )
@@ -501,8 +502,8 @@ def fetchqueueitemevents(
                 raise e
     logging.info("Queue Item event refreshed")
     if synctimes:
-        tracked_synctimes.update_queueitemnew(db=db, newtime=task_sync_time)
-        logging.info(f"Queue Items New Info Succesfully synced: '{filter}'")
+        tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
+        logging.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
     sortresults = sorted(results, key=lambda x: x.Timestamp)
     sync_queueitemevents_new(queueitemevents=sortresults)
     sync_queueitemevents_edit(queueitemevents=sortresults)

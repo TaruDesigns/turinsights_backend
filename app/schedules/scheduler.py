@@ -47,14 +47,14 @@ def start_basic_schedules():
         scheduler.add_job(
             refresh_queueitemevents,
             "interval",
-            seconds=15,
+            seconds=10,
             id="main_queueitemevent_refresh",
         )
     if not scheduler.get_job("main_queueitemnew_refresh"):
         scheduler.add_job(
             refresh_queueitemnew,
             "interval",
-            seconds=15,
+            seconds=20,
             id="main_queueitemnew_refresh",
         )
     if not scheduler.get_job("main_jobstarted_refresh"):
