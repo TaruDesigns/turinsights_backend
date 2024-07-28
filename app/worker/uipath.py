@@ -2,9 +2,12 @@
 import logging
 from contextlib import contextmanager
 from datetime import datetime
+from enum import StrEnum, unique
 from typing import Any, Generator, List, Optional
 
+from celery import Task
 from celery.exceptions import Ignore
+from celery.signals import after_setup_task_logger
 
 # Third-Party Imports
 from raven import Client
@@ -31,22 +34,18 @@ from app.core.uipapiconfig import (
     uipclient_queueuitems,
     uipclient_sessions,
 )
+from app.crud import tracked_synctimes, uip_folder
 from app.crud.base import CRUDBase
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db
 
 client_sentry = Client(settings.SENTRY_DSN)
 
 
-@contextmanager
-def get_db() -> Generator:
-    db = SessionLocal()
-    try:
-        yield db
-    except:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+from celery.app import trace
+
+trace.LOG_SUCCESS = """\
+Task %(name)s[%(id)s] succeeded in %(runtime)ss\
+"""
 
 
 def _CRUDHelper(
@@ -86,7 +85,16 @@ def _APIResToList(response, objSchema):
     ]
 
 
-def _FolderChecker(folders: list[int], db: Session = None):
+def validate_or_default_folderlist(folderlist: list[int] | None) -> list[int]:
+    # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
+    if not folderlist or folderlist == [0]:
+        with get_db() as db:
+            default_folderlist = crud.uip_folder.get_multi(db=db, skip=0, limit=100)
+            folderlist = [fol.Id for fol in default_folderlist]
+    return folderlist
+
+
+def _FolderChecker(folders: list[int] | None, db: Session | None = None):
     """Helper function to validate that the folders indicated do exist in the database
 
     Args:
@@ -124,7 +132,7 @@ def FetchUIPathToken(uipclient_config=uipclient_config) -> schemas.UIPathTokenRe
     with get_db() as db:
         crud.uipath_token.create(db=db, obj_in=tokenresponse)
     logging.info("Token Updated")
-    return tokenresponse.access_token
+    return "Token Updated"
 
 
 @celery_app.task(acks_late=True)
@@ -178,8 +186,9 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
 def fetchjobs(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: List[int] = None,
-    filter: str = None,
+    folderlist: list[int] | None = None,
+    filter: str | None = None,
+    synctimes: bool = False,
 ) -> Any:
     """Get Jobs and save in DB (optional). Set formdata.cruddb to True
 
@@ -191,14 +200,21 @@ def fetchjobs(
         results: List of Jobs (Pydantic models)
     """
     logging.info("Refreshing jobs")
+    if fulldata:
+        objSchema = schemas.JobGETResponseExtended
+    else:
+        objSchema = schemas.JobGETResponse
+    folderlist = validate_or_default_folderlist(folderlist)
     with get_db() as db:
-        if fulldata:
-            objSchema = schemas.JobGETResponseExtended
-        else:
-            objSchema = schemas.JobGETResponse
         _FolderChecker(db=db, folders=folderlist)
         select = objSchema.get_select_filter()
         results = []
+        if synctimes:
+            lastsynctime = tracked_synctimes.get_jobsstarted(db=db)
+            filter = (
+                f"CreationTime gt {lastsynctime.isoformat()}Z" if lastsynctime else None
+            )
+            task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
             try:
                 if filter:
@@ -223,6 +239,9 @@ def fetchjobs(
                 logging.error(f"Error when updating database: Jobs: {e}")
                 raise e
     logging.info("Jobs refreshed")
+    if synctimes:
+        tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
+        logging.info(f"Job Info Succesfully synced: '{filter}'")
     return results
 
 
@@ -355,6 +374,7 @@ def fetchqueueitems(
     fulldata: bool = True,
     folderlist: List[int] = None,
     filter: str = None,
+    synctimes: bool = False,
 ) -> Any:
     """Get QueueItems and save in DB (optional). Set formdata.cruddb to True
 
@@ -365,15 +385,24 @@ def fetchqueueitems(
     Returns:
         results: List of QueueItems (Pydantic models)
     """
+    if fulldata:
+        objSchema = schemas.QueueItemGETResponseExtended
+    else:
+        objSchema = schemas.QueueItemGETResponse
+    folderlist = validate_or_default_folderlist(folderlist)
     logging.info("Refreshing Queue Items")
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        if fulldata:
-            objSchema = schemas.QueueItemGETResponseExtended
-        else:
-            objSchema = schemas.QueueItemGETResponse
         select = objSchema.get_select_filter()
         results = []
+        if synctimes:
+            lastsynctime = tracked_synctimes.get_queueitemnew(db=db)
+            filter = (
+                f"StartProcessing gt {lastsynctime.isoformat()}Z"
+                if lastsynctime
+                else None
+            )
+            task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
             try:
                 if filter:
@@ -402,6 +431,9 @@ def fetchqueueitems(
                 logging.error(f"Error when updating database: QueueItems: {e}")
                 raise e
     logging.info("Queue Items refreshed")
+    if synctimes:
+        tracked_synctimes.update_queueitemnew(db=db, newtime=task_sync_time)
+        logging.info(f"Queue Items New Info Succesfully synced: '{filter}'")
     return results
 
 
@@ -414,6 +446,7 @@ def fetchqueueitemevents(
     fulldata: bool = True,
     folderlist: List[int] = None,
     filter: str = None,
+    synctimes: bool = False,
 ) -> Any:
     """Get Queue Item Events and save in DB (optional). Set formdata.cruddb to True
 
@@ -425,14 +458,21 @@ def fetchqueueitemevents(
         results: List of QueueItemEvents (Pydantic models)
     """
     logging.info("Refreshing queueitemevent")
+    if fulldata:
+        objSchema = schemas.QueueItemEventGETResponseExtended
+    else:
+        objSchema = schemas.QueueItemEventGETResponse
+    folderlist = validate_or_default_folderlist(folderlist)
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        if fulldata:
-            objSchema = schemas.QueueItemEventGETResponseExtended
-        else:
-            objSchema = schemas.QueueItemEventGETResponse
         select = objSchema.get_select_filter()
         results = []
+        if synctimes:
+            lastsynctime = tracked_synctimes.get_queueitemevent(db=db)
+            filter = (
+                f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
+            )
+            task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
             try:
                 if filter:
@@ -461,6 +501,9 @@ def fetchqueueitemevents(
                 logging.error(f"Error when updating database: QueueItemEvents: {e}")
                 raise e
     logging.info("Queue Item event refreshed")
+    if synctimes:
+        tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
+        logging.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
     sortresults = sorted(results, key=lambda x: x.Timestamp)
     sync_queueitemevents_new(queueitemevents=sortresults)
     sync_queueitemevents_edit(queueitemevents=sortresults)
@@ -477,7 +520,7 @@ def sync_queueitemevents_new(queueitemevents: schemas.QueueItemEventGETResponse 
 
 
 def sync_queueitemevents_edit(
-    queueitemevents: schemas.QueueItemEventGETResponse = None
+    queueitemevents: schemas.QueueItemEventGETResponse = None,
 ):
     qitemevents_Edit: schemas.QueueItemEventGETResponse = [
         item for item in queueitemevents if item.Action != "Create"

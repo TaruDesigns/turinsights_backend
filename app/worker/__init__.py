@@ -1,3 +1,5 @@
+from celery.app import trace
+
 from app.core.celery_app import celery_app
 from app.worker.uipath import (
     FetchUIPathToken,
@@ -10,3 +12,7 @@ from app.worker.uipath import (
     fetchqueueitems,
     fetchsessions,
 )
+
+trace.LOG_SUCCESS = """\
+Task %(name)s[%(id)s] succeeded in %(runtime)ss\
+"""

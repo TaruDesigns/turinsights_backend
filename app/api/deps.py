@@ -1,5 +1,5 @@
-from typing import Generator
 from contextlib import AbstractContextManager
+from typing import Generator
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app import crud, models, schemas
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.db.session import get_db_depends as get_db
 
 reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/oauth")
 
@@ -29,17 +30,6 @@ class DBContext(AbstractContextManager):
         self.db.close()
         # Return False to propagate exceptions
         return False
-
-
-def get_db() -> Generator:
-    db = SessionLocal()
-    try:
-        yield db
-    except:
-        db.rollback()
-        raise
-    finally:
-        db.close()
 
 
 def get_token_payload(token: str) -> schemas.TokenPayload:

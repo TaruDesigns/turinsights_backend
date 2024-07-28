@@ -3,12 +3,10 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from uipath_orchestrator_rest.rest import ApiException
 
 import app.worker.uipath
 from app import crud, schemas
 from app.api import deps
-from app.core.celery_app import celery_app
 from app.worker.uipath import FetchUIPathToken, GetUIPathToken
 
 router = APIRouter()
@@ -17,34 +15,6 @@ router = APIRouter()
 # -------------------------------
 # -------------Folders----------
 # -------------------------------
-@router.post("/folders", response_model=None, status_code=201)
-def fetchfolders(
-    formdata: schemas.UIPFetchPostBody,
-) -> Any:
-    """Get folders and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        folderlist: List of Folders (Pydantic models)
-    """
-    try:
-        # Gets folders.
-        kwargs = {"fulldata": formdata.fulldata, "upsert": formdata.upsert}
-        celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: Folders: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: Folders"
-        )
-    return {"msg": "Request accepted"}
 
 
 @router.get("/folders", response_model=None, status_code=201)
@@ -79,38 +49,6 @@ def getfolders(
 # -------------------------------
 # ---------------Jobs------------
 # -------------------------------
-@router.post("/jobs", response_model=None, status_code=201)
-def fetchjobs(formdata: schemas.UIPFetchPostBody) -> Any:
-    """Get Jobs and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        results: List of Jobs (Pydantic models)
-    """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
-    try:
-        kwargs = {
-            "fulldata": formdata.fulldata,
-            "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
-        }
-        celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: Jobs: {e}")
-        raise HTTPException(status_code=409, detail="Could not update database: Jobs.")
-    return {"msg": "Request accepted"}
 
 
 @router.get("/jobs", response_model=None, status_code=201)
@@ -145,40 +83,6 @@ def getjobs(
 # -------------------------------
 # ------------Processes---------
 # -------------------------------
-@router.post("/processes", response_model=None, status_code=201)
-def fetchprocesses(formdata: schemas.UIPFetchPostBody) -> Any:
-    """Get Processes and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        results: List of Processes (Pydantic models)
-    """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
-    try:
-        kwargs = {
-            "fulldata": formdata.fulldata,
-            "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
-        }
-        celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: Processes: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: Processes"
-        )
-    return {"msg": "Request accepted"}
 
 
 @router.get("/processes", response_model=None, status_code=201)
@@ -213,42 +117,6 @@ def getprocesses(
 # -------------------------------
 # ----------QueueDefinitions---
 # -------------------------------
-@router.post("/queuedefinitions", response_model=None, status_code=201)
-def fetchqueuedefinitions(formdata: schemas.UIPFetchPostBody) -> Any:
-    """Get Queue Definitions and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        results: List of QueueDefinitions (Pydantic models)
-    """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
-    try:
-        kwargs = {
-            "fulldata": formdata.fulldata,
-            "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
-        }
-        celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(
-            f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}"
-        )
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: Processes: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: QueueDefinitions"
-        )
-    return {"msg": "Request accepted"}
 
 
 @router.get("/queuedefinitions", response_model=None, status_code=201)
@@ -283,40 +151,6 @@ def getqueuedefinitions(
 # -------------------------------
 # -------QueueItems--------------
 # -------------------------------
-@router.post("/queueitems", response_model=None, status_code=201)
-def fetchqueueitems(formdata: schemas.UIPFetchPostBody) -> Any:
-    """Get QueueItems and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        results: List of QueueItems (Pydantic models)
-    """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
-    try:
-        kwargs = {
-            "fulldata": formdata.fulldata,
-            "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
-        }
-        celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: QueueItems: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: QueueItems"
-        )
-    return {"msg": "Request accepted"}
 
 
 @router.get("/queueitems", response_model=None, status_code=201)
@@ -351,40 +185,6 @@ def getqueueitems(
 # -------------------------------
 # -------QueueItemEvents-----------
 # -------------------------------
-@router.post("/queueitemevents", response_model=None, status_code=201)
-def fetchqueueitemevents(formdata: schemas.UIPFetchPostBody) -> Any:
-    """Get Queue Item Events and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        results: List of QueueItemEvents (Pydantic models)
-    """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
-    try:
-        kwargs = {
-            "fulldata": formdata.fulldata,
-            "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
-        }
-        celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: QueueItemEvents: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: QueueItemEvents"
-        )
-    return {"msg": "Request accepted"}
 
 
 @router.get("/queueitemevents", response_model=None, status_code=201)
@@ -418,40 +218,6 @@ def getqueueitemevents(
 # -------------------
 # -----------Sessions
 # --------------------
-@router.post("/sessions", response_model=None, status_code=201)
-def fetchsessions(formdata: schemas.UIPFetchPostBody) -> Any:
-    """Get sessions and save in DB (optional). Set formdata.cruddb to True
-
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        sessions: List of sessions (Pydantic models)
-    """
-    if formdata.filter:
-        filter = formdata.filter
-    else:
-        filter = None
-    try:
-        kwargs = {
-            "fulldata": formdata.fulldata,
-            "upsert": formdata.upsert,
-            "filter": filter,
-            "folderlist": formdata.folderlist,
-        }
-        celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
-    except ApiException as e:
-        logging.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
-    except Exception as e:
-        logging.error(f"Error when updating database: Sessions: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: Sessions"
-        )
-    return {"msg": "Request accepted"}
 
 
 @router.get("/sessions", response_model=None, status_code=201)

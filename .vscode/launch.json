@@ -12,6 +12,15 @@
             "console": "integratedTerminal",
             "justMyCode": true
         },
+
+        {
+            "name": "Python: Debugfile",
+            "type": "python",
+            "request": "launch",
+            "program": "./debug.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },        
         {
             "name": "Backend Remote",
             "type": "python",
