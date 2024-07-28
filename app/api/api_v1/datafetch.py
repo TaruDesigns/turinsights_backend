@@ -45,7 +45,7 @@ def fetchfolders(
     return {"msg": "Request accepted"}
 
 
-def validate_folderlist(formdata: schemas.UIPFetchPostBody) -> list[int]:
+def validate_or_folderlist(formdata: schemas.UIPFetchPostBody) -> list[int]:
     # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
     if not formdata.folderlist or formdata.folderlist == [0]:
         with app.worker.uipath.get_db() as db:
@@ -60,7 +60,7 @@ def validate_folderlist(formdata: schemas.UIPFetchPostBody) -> list[int]:
 @router.post("/jobs", response_model=None, status_code=201)
 def fetchjobs(
     formdata: schemas.UIPFetchPostBody,
-    folderlist: list[int] = Depends(validate_folderlist),
+    folderlist: list[int] = Depends(validate_or_folderlist),
 ) -> Any:
     """Get Jobs and save in DB (optional). Set formdata.cruddb to True
 
@@ -97,7 +97,7 @@ def fetchjobs(
 @router.post("/processes", response_model=None, status_code=201)
 def fetchprocesses(
     formdata: schemas.UIPFetchPostBody,
-    folderlist: list[int] = Depends(validate_folderlist),
+    folderlist: list[int] = Depends(validate_or_folderlist),
 ) -> Any:
     """Get Processes and save in DB (optional). Set formdata.cruddb to True
 
@@ -135,7 +135,7 @@ def fetchprocesses(
 @router.post("/queuedefinitions", response_model=None, status_code=201)
 def fetchqueuedefinitions(
     formdata: schemas.UIPFetchPostBody,
-    folderlist: list[int] = Depends(validate_folderlist),
+    folderlist: list[int] = Depends(validate_or_folderlist),
 ) -> Any:
     """Get Queue Definitions and save in DB (optional). Set formdata.cruddb to True
 
@@ -175,7 +175,7 @@ def fetchqueuedefinitions(
 @router.post("/queueitems", response_model=None, status_code=201)
 def fetchqueueitems(
     formdata: schemas.UIPFetchPostBody,
-    folderlist: list[int] = Depends(validate_folderlist),
+    folderlist: list[int] = Depends(validate_or_folderlist),
 ) -> Any:
     """Get QueueItems and save in DB (optional). Set formdata.cruddb to True
 
@@ -213,7 +213,7 @@ def fetchqueueitems(
 @router.post("/queueitemevents", response_model=None, status_code=201)
 def fetchqueueitemevents(
     formdata: schemas.UIPFetchPostBody,
-    folderlist: list[int] = Depends(validate_folderlist),
+    folderlist: list[int] = Depends(validate_or_folderlist),
 ) -> Any:
     """Get Queue Item Events and save in DB (optional). Set formdata.cruddb to True
 
@@ -251,7 +251,7 @@ def fetchqueueitemevents(
 @router.post("/sessions", response_model=None, status_code=201)
 def fetchsessions(
     formdata: schemas.UIPFetchPostBody,
-    folderlist: list[int] = Depends(validate_folderlist),
+    folderlist: list[int] = Depends(validate_or_folderlist),
 ) -> Any:
     """Get sessions and save in DB (optional). Set formdata.cruddb to True
 

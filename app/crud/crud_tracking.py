@@ -81,6 +81,42 @@ class CRUDSyncTimes(
         )
         return self.upsert(db=db, obj_in=schematoupdate)
 
+    def get_queueitemnew(self, db: Session) -> datetime.datetime:
+        try:
+            timestamp = self.get(db=db, id=TrackingKeys.QueueItemsNew).TimeStamp
+        except Exception as e:
+            logging.error(
+                f"No Synctime found for QueueItemEvents, defaulting to MinTime"
+            )
+            timestamp = datetime.datetime.min
+        return timestamp
+
+    def update_queueitemnew(self, db: Session, newtime: datetime.datetime) -> None:
+        schematoupdate = trackschemas.SyncTimes(
+            id=int(TrackingKeys.QueueItemsNew),
+            TimeStamp=newtime,
+            Description="QueueItemsNew",
+        )
+        return self.upsert(db=db, obj_in=schematoupdate)
+
+    def get_jobsstarted(self, db: Session) -> datetime.datetime:
+        try:
+            timestamp = self.get(db=db, id=TrackingKeys.JobsStarted).TimeStamp
+        except Exception as e:
+            logging.error(
+                f"No Synctime found for QueueItemEvents, defaulting to MinTime"
+            )
+            timestamp = datetime.datetime.min
+        return timestamp
+
+    def update_jobsstarted(self, db: Session, newtime: datetime.datetime) -> None:
+        schematoupdate = trackschemas.SyncTimes(
+            id=int(TrackingKeys.QueueItemEvents),
+            TimeStamp=newtime,
+            Description="JobsStarted",
+        )
+        return self.upsert(db=db, obj_in=schematoupdate)
+
 
 tracked_process = CRUDTrackedProcess(uipmodels.TrackedProcess)
 tracked_queue = CRUDTrackedQueue(uipmodels.TrackedQueue)
