@@ -32,21 +32,9 @@ from app.core.uipapiconfig import (
     uipclient_sessions,
 )
 from app.crud.base import CRUDBase
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db
 
 client_sentry = Client(settings.SENTRY_DSN)
-
-
-@contextmanager
-def get_db() -> Generator:
-    db = SessionLocal()
-    try:
-        yield db
-    except:
-        db.rollback()
-        raise
-    finally:
-        db.close()
 
 
 def _CRUDHelper(
@@ -477,7 +465,7 @@ def sync_queueitemevents_new(queueitemevents: schemas.QueueItemEventGETResponse 
 
 
 def sync_queueitemevents_edit(
-    queueitemevents: schemas.QueueItemEventGETResponse = None
+    queueitemevents: schemas.QueueItemEventGETResponse = None,
 ):
     qitemevents_Edit: schemas.QueueItemEventGETResponse = [
         item for item in queueitemevents if item.Action != "Create"

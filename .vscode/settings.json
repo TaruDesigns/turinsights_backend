@@ -10,7 +10,7 @@
         "**/**schema_types**":true,
         "**/**email-templates**":true,
         "**/**core**":true,
-        "**/db":true,
+        //"**/db":true,
         "imports":true,
         ".flake8":true,
         ".python-version":true,

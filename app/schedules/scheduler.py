@@ -1,13 +1,13 @@
-import logging
 import datetime
+import logging
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore as JobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler as Scheduler
 
-from app.api.deps import get_db, DBContext
+from app.api.deps import DBContext, get_db
 from app.core.celery_app import celery_app
 from app.core.config import settings
-from app.crud import uip_folder, tracked_synctimes
+from app.crud import tracked_synctimes, uip_folder
 from app.worker.uipath import FetchUIPathToken
 
 jobstore = JobStore(url=settings.SQLALCHEMY_DATABASE_URI)
@@ -20,6 +20,7 @@ def start_basic_schedules():
         scheduler.add_job(
             refresh_token, "interval", seconds=150, id="main_uip_token_refresh"
         )
+    return
     if not scheduler.get_job("main_queueitemevent_refresh"):
         scheduler.add_job(
             refresh_queueitemevents,
@@ -79,6 +80,8 @@ async def refresh_processes_and_queues() -> None:
 
 
 async def refresh_queueitemevents() -> None:
+    # todo CHANGE THIS AND MAKE IT WORK WITH ASYNC
+    return
     folderlist = get_folderlist()
     with DBContext() as db:
         lastsynctime = tracked_synctimes.get_queueitemevent(db=db)

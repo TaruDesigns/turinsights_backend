@@ -14,10 +14,10 @@
         },
 
         {
-            "name": "Python: Main through uvicorn",
+            "name": "Python: Debugfile",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "./debug.py",
             "console": "integratedTerminal",
             "justMyCode": true
         },        
