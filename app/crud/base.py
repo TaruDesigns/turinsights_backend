@@ -3,6 +3,7 @@ from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -66,6 +67,13 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db.delete(obj)
         db.commit()
         return obj
+
+    def remove_all_but_id(self, db: Session, *, id: int):
+        # Helper function to remove all rows except the one with the specified id
+        # Useful for tables that need to keep only one row (like uipath token)
+        stmt = delete(self.model).where(self.model.access_token != id)
+        db.execute(stmt)
+        db.commit()
 
     def upsert(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
         """Helper function to "Upsert" -> If item is not created, create it

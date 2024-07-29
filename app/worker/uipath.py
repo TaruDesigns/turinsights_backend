@@ -1,17 +1,9 @@
 # Standard Library Imports
-import logging
-from contextlib import contextmanager
+
 from datetime import datetime
-from enum import StrEnum, unique
-from typing import Any, Generator, List, Optional
+from typing import Any
 
-from celery import Task
-from celery.exceptions import Ignore
-from celery.signals import after_setup_task_logger
-
-# Third-Party Imports
-from raven import Client
-from sqlalchemy.exc import IntegrityError
+from loguru import logger
 
 # External Dependencies
 from sqlalchemy.orm import Session
@@ -34,15 +26,12 @@ from app.core.uipapiconfig import (
     uipclient_queueuitems,
     uipclient_sessions,
 )
-from app.crud import tracked_synctimes, uip_folder
 from app.crud.base import CRUDBase
-from app.db.session import SessionLocal, get_db
-
-client_sentry = Client(settings.SENTRY_DSN)
+from app.db.session import get_db
 
 
 def _CRUDHelper(
-    obj_in: List[schemas.BaseApiModel],
+    obj_in: list[schemas.BaseApiModel],
     crudobject: CRUDBase,
     upsert: bool = True,
     db: Session = None,
@@ -70,7 +59,7 @@ def _APIResToList(response, objSchema):
         objSchema (_type_): Pydantic Model
 
     Returns:
-        List[objSchema]: List of items
+        list[objSchema]: List of items
     """
     return [
         objSchema.parse_from_swagger(obj.to_dict(), obj.attribute_map)
@@ -95,7 +84,7 @@ def _FolderChecker(folders: list[int] | None, db: Session | None = None):
         objSchema (_type_): Pydantic Model
 
     Returns:
-        List[objSchema]: List of items
+        list[objSchema]: List of items
     """
     if folders is None:
         raise ValueError("No folder list was provided")
@@ -114,7 +103,7 @@ def FetchUIPathToken(uipclient_config=uipclient_config) -> schemas.UIPathTokenRe
     Returns:
         UIPathTokenResponse: Pydantic model with all the parameters from repsonse (access token, expiration)
     """
-    logging.info("Refreshing token")
+    logger.info("Refreshing token")
     response = oauth2_session.fetch_token(
         url=settings.UIP_AUTH_TOKENURL, grant_type=settings.UIP_GRANT_TYPE
     )
@@ -123,15 +112,16 @@ def FetchUIPathToken(uipclient_config=uipclient_config) -> schemas.UIPathTokenRe
     if uipclient_config is not None:
         uipclient_config.access_token = tokenresponse.access_token
     with get_db() as db:
-        crud.uipath_token.create(db=db, obj_in=tokenresponse)
-    logging.info("Token Updated")
-    return "Token Updated"
+        crud.uipath_token.upsert(db=db, obj_in=tokenresponse)
+        crud.uipath_token.remove_expired(db=db)
+    logger.info("Token Updated")
+    return tokenresponse
 
 
 @celery_app.task(acks_late=True)
-def GetUIPathToken(uipclient_config: Configuration = uipclient_config):
+def GetUIPathToken(uipclient_config: Configuration = uipclient_config) -> str:
     with get_db() as db:
-        token = crud.uipath_token.get(db=db)
+        token: str = crud.uipath_token.get(db=db)
     uipclient_config.access_token = token
     return token
 
@@ -147,7 +137,7 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
     Returns:
         folderlist: List of Folders (Pydantic models)
     """
-    logging.info("Refreshing folders")
+    logger.info("Refreshing folders")
     GetUIPathToken(uipclient_config=uipclient_config)
     if fulldata:
         objSchema = schemas.FolderGETResponse  # Extended
@@ -159,16 +149,16 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
         folders = uipclient_folders.folders_get(select=select)
         folderlist = _APIResToList(response=folders, objSchema=objSchema)
     except ApiException as e:
-        logging.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
+        logger.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
         raise e
     try:
         crudobject = crud.uip_folder
         with get_db() as db:
             _CRUDHelper(crudobject=crudobject, upsert=upsert, obj_in=folderlist, db=db)
     except Exception as e:
-        logging.error(f"Error when updating database: Folders: {e}")
+        logger.error(f"Error when updating database: Folders: {e}")
         raise e
-    logging.info("Folders refreshed")
+    logger.info("Folders refreshed")
     return folderlist
 
 
@@ -192,7 +182,7 @@ def fetchjobs(
     Returns:
         results: List of Jobs (Pydantic models)
     """
-    logging.info("Refreshing jobs")
+    logger.info("Refreshing jobs")
     if fulldata:
         objSchema = schemas.JobGETResponseExtended
     else:
@@ -203,7 +193,7 @@ def fetchjobs(
         select = objSchema.get_select_filter()
         results = []
         if synctimes:
-            lastsynctime = tracked_synctimes.get_jobsstarted(db=db)
+            lastsynctime = crud.tracked_synctimes.get_jobsstarted(db=db)
             filter = (
                 f"CreationTime gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             )
@@ -223,18 +213,18 @@ def fetchjobs(
                 joblist = _APIResToList(response=jobs, objSchema=objSchema)
                 results = results + joblist
             except ApiException as e:
-                logging.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
+                logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
                 raise e
             try:
                 crudobject = crud.uip_job
                 _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=joblist)
             except Exception as e:
-                logging.error(f"Error when updating database: Jobs: {e}")
+                logger.error(f"Error when updating database: Jobs: {e}")
                 raise e
-    logging.info("Jobs refreshed")
+    logger.info("Jobs refreshed")
     if synctimes:
-        tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
-        logging.info(f"Job Info Succesfully synced: '{filter}'")
+        crud.tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
+        logger.info(f"Job Info Succesfully synced: '{filter}'")
     return results
 
 
@@ -245,7 +235,7 @@ def fetchjobs(
 def fetchprocesses(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: List[int] = None,
+    folderlist: list[int] = None,
     filter: str = None,
 ) -> Any:
     """Get Processes and save in DB (optional). Set formdata.cruddb to True
@@ -257,7 +247,7 @@ def fetchprocesses(
     Returns:
         results: List of Processes (Pydantic models)
     """
-    logging.info("Refreshing processes")
+    logger.info("Refreshing processes")
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
         if fulldata:
@@ -281,7 +271,7 @@ def fetchprocesses(
                 processes = _APIResToList(response=processes, objSchema=objSchema)
                 results = results + processes
             except ApiException as e:
-                logging.error(
+                logger.error(
                     f"Exception when calling ReleasesAPI->releases_get: {e.body}"
                 )
                 raise e
@@ -291,9 +281,9 @@ def fetchprocesses(
                     crudobject=crudobject, upsert=upsert, db=db, obj_in=processes
                 )
             except Exception as e:
-                logging.error(f"Error when updating database: Processes: {e}")
+                logger.error(f"Error when updating database: Processes: {e}")
                 raise e
-    logging.info("Processes refreshed")
+    logger.info("Processes refreshed")
     return results
 
 
@@ -304,7 +294,7 @@ def fetchprocesses(
 def fetchqueuedefinitions(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: List[int] = None,
+    folderlist: list[int] = None,
     filter: str = None,
 ) -> Any:
     """Get Queue Definitions and save in DB (optional). Set formdata.cruddb to True
@@ -316,7 +306,7 @@ def fetchqueuedefinitions(
     Returns:
         results: List of QueueDefinitions (Pydantic models)
     """
-    logging.info("Refreshing queuedefinitions")
+    logger.info("Refreshing queuedefinitions")
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
         if fulldata:
@@ -342,7 +332,7 @@ def fetchqueuedefinitions(
                 )
                 results = results + queuedefinitions
             except ApiException as e:
-                logging.error(
+                logger.error(
                     f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}"
                 )
                 raise e
@@ -352,9 +342,9 @@ def fetchqueuedefinitions(
                     crudobject=crudobject, upsert=upsert, db=db, obj_in=queuedefinitions
                 )
             except Exception as e:
-                logging.error(f"Error when updating database: Processes: {e}")
+                logger.error(f"Error when updating database: Processes: {e}")
                 raise e
-    logging.info("QueueDefinitions refreshed")
+    logger.info("QueueDefinitions refreshed")
     return results
 
 
@@ -365,7 +355,7 @@ def fetchqueuedefinitions(
 def fetchqueueitems(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: List[int] = None,
+    folderlist: list[int] = None,
     filter: str = None,
     synctimes: bool = False,
 ) -> Any:
@@ -383,13 +373,13 @@ def fetchqueueitems(
     else:
         objSchema = schemas.QueueItemGETResponse
     folderlist = validate_or_default_folderlist(folderlist)
-    logging.info("Refreshing Queue Items")
+    logger.info("Refreshing Queue Items")
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
         select = objSchema.get_select_filter()
         results = []
         if synctimes:
-            lastsynctime = tracked_synctimes.get_queueitemnew(db=db)
+            lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
             filter = (
                 f"StartProcessing gt {lastsynctime.isoformat()}Z"
                 if lastsynctime
@@ -411,7 +401,7 @@ def fetchqueueitems(
                 queueitems = _APIResToList(response=queueitems, objSchema=objSchema)
                 results = results + queueitems
             except ApiException as e:
-                logging.error(
+                logger.error(
                     f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}"
                 )
                 raise e
@@ -421,12 +411,12 @@ def fetchqueueitems(
                     crudobject=crudobject, upsert=upsert, db=db, obj_in=queueitems
                 )
             except Exception as e:
-                logging.error(f"Error when updating database: QueueItems: {e}")
+                logger.error(f"Error when updating database: QueueItems: {e}")
                 raise e
-    logging.info("Queue Items refreshed")
+    logger.info("Queue Items refreshed")
     if synctimes:
-        tracked_synctimes.update_queueitemnew(db=db, newtime=task_sync_time)
-        logging.info(f"Queue Items New Info Succesfully synced: '{filter}'")
+        crud.tracked_synctimes.update_queueitemnew(db=db, newtime=task_sync_time)
+        logger.info(f"Queue Items New Info Succesfully synced: '{filter}'")
     return results
 
 
@@ -437,7 +427,7 @@ def fetchqueueitems(
 def fetchqueueitemevents(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: List[int] = None,
+    folderlist: list[int] = None,
     filter: str = None,
     synctimes: bool = False,
 ) -> Any:
@@ -450,7 +440,7 @@ def fetchqueueitemevents(
     Returns:
         results: List of QueueItemEvents (Pydantic models)
     """
-    logging.info("Refreshing queueitemevent")
+    logger.info("Refreshing queueitemevent")
     if fulldata:
         objSchema = schemas.QueueItemEventGETResponseExtended
     else:
@@ -464,7 +454,7 @@ def fetchqueueitemevents(
             | schemas.QueueItemEventGETResponse
         ] = []
         if synctimes:
-            lastsynctime = tracked_synctimes.get_queueitemevent(db=db)
+            lastsynctime = crud.tracked_synctimes.get_queueitemevent(db=db)
             filter = (
                 f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             )
@@ -484,7 +474,7 @@ def fetchqueueitemevents(
                 queueitems = _APIResToList(response=queueitems, objSchema=objSchema)
                 results = results + queueitems
             except ApiException as e:
-                logging.error(
+                logger.error(
                     f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}"
                 )
                 raise e
@@ -497,12 +487,12 @@ def fetchqueueitemevents(
             crudobject = crud.uip_queue_item_event
             _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
         except Exception as e:
-            logging.error(f"Error when updating database: QueueItemEvents: {e}")
+            logger.error(f"Error when updating database: QueueItemEvents: {e}")
             raise e
-    logging.info("Queue Item event refreshed")
+    logger.info("Queue Item event refreshed")
     if synctimes:
-        tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
-        logging.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
+        crud.tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
+        logger.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
     return results
 
 
@@ -534,16 +524,16 @@ def sync_events_to_items(queueitemevents: schemas.QueueItemEventGETResponse = No
         )
         # Get New
     if ids_not_in_db:
-        logging.info("Getting new queue items")
+        logger.info("Getting new queue items")
         filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
         fetchqueueitems(upsert=False, fulldata=True, filter=filter)
-        logging.info("New queue items added")
+        logger.info("New queue items added")
     if existing_ids:
         # Update
-        logging.info("Updating items")
+        logger.info("Updating items")
         filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
         fetchqueueitems(upsert=True, fulldata=False, filter=filter)
-        logging.info("Items updated")
+        logger.info("Items updated")
 
 
 # -------------------
@@ -562,7 +552,7 @@ def fetchsessions(
     Returns:
         sessions: List of sessions (Pydantic models)
     """
-    logging.info("Refreshing sessions")
+    logger.info("Refreshing sessions")
     with get_db() as db:
         if fulldata:
             objSchema = schemas.SessionGETResponseExtended
@@ -581,13 +571,14 @@ def fetchsessions(
                 )
             sessions = _APIResToList(response=sessions, objSchema=objSchema)
         except ApiException as e:
-            logging.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
+            logger.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
             raise e
         try:
             crudobject = crud.uip_session
             _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=sessions)
         except Exception as e:
-            logging.error(f"Error when updating database: Sessions: {e}")
+            logger.error(f"Error when updating database: Sessions: {e}")
             raise e
-    logging.info("sessions refreshed")
+    logger.info("sessions refreshed")
+    return sessions
     return sessions
