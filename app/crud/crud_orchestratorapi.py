@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 from odata_query.sqlalchemy import apply_odata_query
 from sqlalchemy import select
@@ -49,6 +49,25 @@ class CRUDQueueItem(
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.QueueItem]:
         query = apply_odata_query(select(self.model), filter)
         return db.execute(query).scalars().all()
+
+    def get_by_id_list_split(
+        self, db: Session, ids: list[int]
+    ) -> Tuple[list[int], list[int]]:
+        """This is a helper function to return which IDs are present in the database and which are not, based on an input list of IDs
+        get_odata kind of replaces this but this one is more direct without dependencies
+        Args:
+            db (Session): _description_
+            ids (list[int]): _description_
+
+        Returns:
+            Tuple[list[int], list[int]] | None: _description_
+        """
+        localquery = select(self.model.Id).where(self.model.Id.in_(ids))
+        existing_ids = db.execute(localquery).scalars().all()
+        existing_ids_set = set(existing_ids)
+        all_ids_set = set(ids)
+        ids_not_in_db = list(all_ids_set - existing_ids_set)
+        return existing_ids, ids_not_in_db
 
 
 class CRUDQueueItemEvent(

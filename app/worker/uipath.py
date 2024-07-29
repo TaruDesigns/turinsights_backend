@@ -41,13 +41,6 @@ from app.db.session import SessionLocal, get_db
 client_sentry = Client(settings.SENTRY_DSN)
 
 
-from celery.app import trace
-
-trace.LOG_SUCCESS = """\
-Task %(name)s[%(id)s] succeeded in %(runtime)ss\
-"""
-
-
 def _CRUDHelper(
     obj_in: List[schemas.BaseApiModel],
     crudobject: CRUDBase,
@@ -466,7 +459,10 @@ def fetchqueueitemevents(
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
         select = objSchema.get_select_filter()
-        results = []
+        results: list[
+            schemas.QueueItemEventGETResponseExtended
+            | schemas.QueueItemEventGETResponse
+        ] = []
         if synctimes:
             lastsynctime = tracked_synctimes.get_queueitemevent(db=db)
             filter = (
@@ -504,30 +500,47 @@ def fetchqueueitemevents(
     if synctimes:
         tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
         logging.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
-    sortresults = sorted(results, key=lambda x: x.Timestamp)
-    sync_queueitemevents_new(queueitemevents=sortresults)
-    sync_queueitemevents_edit(queueitemevents=sortresults)
-    return sortresults
+    if results:
+        sync_events_to_items(queueitemevents=results)
+    return results
 
 
-def sync_queueitemevents_new(queueitemevents: schemas.QueueItemEventGETResponse = None):
-    qitemevents_Create: schemas.QueueItemEventGETResponse = [
-        item for item in queueitemevents if item.Action == "Create"
-    ]
-    for item in qitemevents_Create:
-        logging.info(f"Creating queue item with id: {item.QueueItemId}")
-    pass
+def sync_events_to_items(queueitemevents: schemas.QueueItemEventGETResponse = None):
+    """This function syncs the queueitemevents to the state in the DB The business logic is:
+        - If the item is NOT in the database, it needs to be inserted.
+            In order to do that, we retrieve its full data (API -> GetQueueItem) and upsert
+        - If the item IS in the database, we retrieve the latest data,
+            selecting so we only get the data we need from the API for performance (no fulldata)
+        Note that in order to update the QueueItemData we don't actually hit the database for each and every QueueItemEvent
+        because we only care about the latest data.
+        We also don't care if the item is in its final state (eg, multiple Events)
+            but the Database never saw it (eg the QueueItemId is not found)
+            because we will just get the fulldata (including its final state) anyway
+        But we have previously inserted ALL the QueueItemEvents in its table.
 
+        #TODO: This could in theory be another celery task, but one that is ONLY launched after retrieving Events.
 
-def sync_queueitemevents_edit(
-    queueitemevents: schemas.QueueItemEventGETResponse = None,
-):
-    qitemevents_Edit: schemas.QueueItemEventGETResponse = [
-        item for item in queueitemevents if item.Action != "Create"
-    ]  # Even if there's an "Edit" action, we only care for "Update vs Insert"
-    for item in qitemevents_Edit:
-        logging.info(f"Updating queue item with id: {item.QueueItemId} from event")
-    pass
+    Args:
+        queueitemevents (schemas.QueueItemEventGETResponse, optional): _description_. Defaults to None.
+    """
+
+    #
+    unique_qitem_ids = list(set(item.QueueItemId for item in queueitemevents))
+    with get_db() as db:
+        # Split queueitemevents into two buckets: One for items that are not in DB and one that are in DB (based on QueueItemId)
+        existing_ids, ids_not_in_db = crud.uip_queue_item.get_by_id_list_split(
+            db=db, ids=unique_qitem_ids
+        )
+        # Get New
+    logging.info("Getting new queue items")
+    filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
+    fetchqueueitems(upsert=False, fulldata=True, filter=filter)
+    logging.info("New queue items added")
+    # Update
+    logging.info("Updating items")
+    filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
+    fetchqueueitems(upsert=True, fulldata=False, filter=filter)
+    logging.info("Items updated")
 
 
 # -------------------

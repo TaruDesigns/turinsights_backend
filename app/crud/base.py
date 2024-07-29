@@ -78,7 +78,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return db_obj
         except IntegrityError as e:
             db.rollback()
-            logging.error("Duplicate record")
+            logging.error(e)
 
     def create_safe(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
         """Helper function to "Create and ignore duplicate errors"""
@@ -87,5 +87,5 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return db_obj
         except IntegrityError as e:
             db.rollback()
-            logging.warn("Duplicate record")
+            logging.warn(e)
             return None

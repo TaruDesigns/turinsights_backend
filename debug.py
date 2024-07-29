@@ -11,4 +11,9 @@ if __name__ == "__main__":
 
     from app.main import app
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    # uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    from app.worker import FetchUIPathToken, fetchqueueitemevents
+
+    FetchUIPathToken()
+
+    fetchqueueitemevents(synctimes=True)
