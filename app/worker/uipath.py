@@ -488,20 +488,21 @@ def fetchqueueitemevents(
                     f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}"
                 )
                 raise e
-            try:
-                crudobject = crud.uip_queue_item_event
-                _CRUDHelper(
-                    crudobject=crudobject, upsert=upsert, db=db, obj_in=queueitems
-                )
-            except Exception as e:
-                logging.error(f"Error when updating database: QueueItemEvents: {e}")
-                raise e
+
+    if results:
+        # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
+        sync_events_to_items(queueitemevents=results)
+        # for res in results:
+        try:
+            crudobject = crud.uip_queue_item_event
+            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
+        except Exception as e:
+            logging.error(f"Error when updating database: QueueItemEvents: {e}")
+            raise e
     logging.info("Queue Item event refreshed")
     if synctimes:
         tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
         logging.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
-    if results:
-        sync_events_to_items(queueitemevents=results)
     return results
 
 
@@ -532,15 +533,17 @@ def sync_events_to_items(queueitemevents: schemas.QueueItemEventGETResponse = No
             db=db, ids=unique_qitem_ids
         )
         # Get New
-    logging.info("Getting new queue items")
-    filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
-    fetchqueueitems(upsert=False, fulldata=True, filter=filter)
-    logging.info("New queue items added")
-    # Update
-    logging.info("Updating items")
-    filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
-    fetchqueueitems(upsert=True, fulldata=False, filter=filter)
-    logging.info("Items updated")
+    if ids_not_in_db:
+        logging.info("Getting new queue items")
+        filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
+        fetchqueueitems(upsert=False, fulldata=True, filter=filter)
+        logging.info("New queue items added")
+    if existing_ids:
+        # Update
+        logging.info("Updating items")
+        filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
+        fetchqueueitems(upsert=True, fulldata=False, filter=filter)
+        logging.info("Items updated")
 
 
 # -------------------
