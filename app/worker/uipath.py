@@ -1,3 +1,6 @@
+"""This file stores the celery tasks for the uipath data refresh (calling the API)
+Note that the functions can also be used directly and they return the results from calling the API"""
+
 # Standard Library Imports
 
 from datetime import datetime
@@ -10,7 +13,7 @@ from sqlalchemy.orm import Session
 from uipath_orchestrator_rest import Configuration
 from uipath_orchestrator_rest.rest import ApiException
 
-from app import crud, models, schemas
+from app import crud, schemas
 
 # Project-Specific Imports
 from app.core.celery_app import celery_app
@@ -34,7 +37,7 @@ def _CRUDHelper(
     obj_in: list[schemas.BaseApiModel],
     crudobject: CRUDBase,
     upsert: bool = True,
-    db: Session = None,
+    db: Session | None = None,
 ):
     """CRUD Helper to reuse in other functions.
 
@@ -61,10 +64,7 @@ def _APIResToList(response, objSchema):
     Returns:
         list[objSchema]: List of items
     """
-    return [
-        objSchema.parse_from_swagger(obj.to_dict(), obj.attribute_map)
-        for obj in response.value
-    ]
+    return [objSchema.parse_from_swagger(obj.to_dict(), obj.attribute_map) for obj in response.value]
 
 
 def validate_or_default_folderlist(folderlist: list[int] | None) -> list[int]:
@@ -98,15 +98,13 @@ def _FolderChecker(folders: list[int] | None, db: Session | None = None):
 @celery_app.task(acks_late=True)
 def FetchUIPathToken(uipclient_config=uipclient_config) -> schemas.UIPathTokenResponse:
     """Fetch UIPath Access Token.
-    Helper function to fetch token and update the "config" setting
+    Fetches a new token and update the "config" setting, deleting old tokens as well
 
     Returns:
         UIPathTokenResponse: Pydantic model with all the parameters from repsonse (access token, expiration)
     """
     logger.info("Refreshing token")
-    response = oauth2_session.fetch_token(
-        url=settings.UIP_AUTH_TOKENURL, grant_type=settings.UIP_GRANT_TYPE
-    )
+    response = oauth2_session.fetch_token(url=settings.UIP_AUTH_TOKENURL, grant_type=settings.UIP_GRANT_TYPE)
     tokenresponse = schemas.UIPathTokenResponse.parse_obj(response)
     # We update the UIPConfig variable
     if uipclient_config is not None:
@@ -120,6 +118,14 @@ def FetchUIPathToken(uipclient_config=uipclient_config) -> schemas.UIPathTokenRe
 
 @celery_app.task(acks_late=True)
 def GetUIPathToken(uipclient_config: Configuration = uipclient_config) -> str:
+    """Returns uipath token (bare string) from database
+
+    Args:
+        uipclient_config (Configuration, optional): _description_. Defaults to uipclient_config.
+
+    Returns:
+        str: Access token (Bearer)
+    """
     with get_db() as db:
         token: str = crud.uipath_token.get(db=db)
     uipclient_config.access_token = token
@@ -128,8 +134,7 @@ def GetUIPathToken(uipclient_config: Configuration = uipclient_config) -> str:
 
 @celery_app.task(acks_late=True)
 def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
-    """Get folders and save in DB (optional). Set formdata.cruddb to True
-
+    """Get folders and save in DB
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
         formdata (UIPFetchPostBody): Form Data (JSON Body)
@@ -148,6 +153,7 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
         select = objSchema.get_select_filter()
         folders = uipclient_folders.folders_get(select=select)
         folderlist = _APIResToList(response=folders, objSchema=objSchema)
+        logger.info(f"Retrieved Folders API Info")
     except ApiException as e:
         logger.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
         raise e
@@ -155,6 +161,7 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
         crudobject = crud.uip_folder
         with get_db() as db:
             _CRUDHelper(crudobject=crudobject, upsert=upsert, obj_in=folderlist, db=db)
+        logger.info("Folder info stored in DB")
     except Exception as e:
         logger.error(f"Error when updating database: Folders: {e}")
         raise e
@@ -173,7 +180,7 @@ def fetchjobs(
     filter: str | None = None,
     synctimes: bool = False,
 ) -> Any:
-    """Get Jobs and save in DB (optional). Set formdata.cruddb to True
+    """Get Jobs and save in DB
 
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
@@ -187,40 +194,35 @@ def fetchjobs(
         objSchema = schemas.JobGETResponseExtended
     else:
         objSchema = schemas.JobGETResponse
+    select = objSchema.get_select_filter()
     folderlist = validate_or_default_folderlist(folderlist)
+    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        select = objSchema.get_select_filter()
         results = []
         if synctimes:
+            # Sync request -> use latest sync time
             lastsynctime = crud.tracked_synctimes.get_jobsstarted(db=db)
-            filter = (
-                f"CreationTime gt {lastsynctime.isoformat()}Z" if lastsynctime else None
-            )
+            filter = f"CreationTime gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
             try:
-                if filter:
-                    jobs = uipclient_jobs.jobs_get(
-                        select=select,
-                        filter=filter,
-                        x_uipath_organization_unit_id=folder,
-                    )
-                else:
-                    jobs = uipclient_jobs.jobs_get(
-                        select=select, x_uipath_organization_unit_id=folder
-                    )
+                jobs = uipclient_jobs.jobs_get(
+                    select=select,
+                    filter=filter,
+                    x_uipath_organization_unit_id=folder,
+                )
+                logger.info(f"Retrieved Jobs API Info for folder: {folder}")
                 joblist = _APIResToList(response=jobs, objSchema=objSchema)
                 results = results + joblist
             except ApiException as e:
                 logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
-                raise e
-            try:
-                crudobject = crud.uip_job
-                _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=joblist)
-            except Exception as e:
-                logger.error(f"Error when updating database: Jobs: {e}")
-                raise e
+        try:
+            crudobject = crud.uip_job
+            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
+            logger.info("Updated local Job info")
+        except Exception as e:
+            logger.error(f"Error when updating database: Jobs: {e}")
     logger.info("Jobs refreshed")
     if synctimes:
         crud.tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
@@ -235,10 +237,10 @@ def fetchjobs(
 def fetchprocesses(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: list[int] = None,
-    filter: str = None,
+    folderlist: list[int] | None = None,
+    filter: str | None = None,
 ) -> Any:
-    """Get Processes and save in DB (optional). Set formdata.cruddb to True
+    """Get Processes and save in DB
 
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
@@ -248,41 +250,35 @@ def fetchprocesses(
         results: List of Processes (Pydantic models)
     """
     logger.info("Refreshing processes")
+    folderlist = validate_or_default_folderlist(folderlist)
+    if fulldata:
+        objSchema = schemas.ProcessGETResponseExtended
+    else:
+        objSchema = schemas.ProcessGETResponse
+    select = objSchema.get_select_filter()
+    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        if fulldata:
-            objSchema = schemas.ProcessGETResponseExtended
-        else:
-            objSchema = schemas.ProcessGETResponse
-        select = objSchema.get_select_filter()
         results = []
         for folder in folderlist:  # folderlist will already be the IDs
             try:
-                if filter:
-                    processes = uipclient_processes.releases_get(
-                        select=select,
-                        filter=filter,
-                        x_uipath_organization_unit_id=folder,
-                    )
-                else:
-                    processes = uipclient_processes.releases_get(
-                        select=select, x_uipath_organization_unit_id=folder
-                    )
+                processes = uipclient_processes.releases_get(
+                    select=select,
+                    filter=filter,
+                    x_uipath_organization_unit_id=folder,
+                )
+                logger.info(f"Retrieved Processes API Info for folder: {folder}")
                 processes = _APIResToList(response=processes, objSchema=objSchema)
                 results = results + processes
             except ApiException as e:
-                logger.error(
-                    f"Exception when calling ReleasesAPI->releases_get: {e.body}"
-                )
-                raise e
-            try:
-                crudobject = crud.uip_process
-                _CRUDHelper(
-                    crudobject=crudobject, upsert=upsert, db=db, obj_in=processes
-                )
-            except Exception as e:
-                logger.error(f"Error when updating database: Processes: {e}")
-                raise e
+                logger.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
+        try:
+            crudobject = crud.uip_process
+            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
+            logger.info("Processes stored in DB")
+        except Exception as e:
+            logger.error(f"Error when updating database: Processes: {e}")
+            raise e
     logger.info("Processes refreshed")
     return results
 
@@ -294,8 +290,8 @@ def fetchprocesses(
 def fetchqueuedefinitions(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: list[int] = None,
-    filter: str = None,
+    folderlist: list[int] | None = None,
+    filter: str | None = None,
 ) -> Any:
     """Get Queue Definitions and save in DB (optional). Set formdata.cruddb to True
 
@@ -307,43 +303,35 @@ def fetchqueuedefinitions(
         results: List of QueueDefinitions (Pydantic models)
     """
     logger.info("Refreshing queuedefinitions")
+    if fulldata:
+        objSchema = schemas.QueueDefinitionGETResponseExtended
+    else:
+        objSchema = schemas.QueueDefinitionGETResponse
+    select = objSchema.get_select_filter()
+    folderlist = validate_or_default_folderlist(folderlist)
+    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        if fulldata:
-            objSchema = schemas.QueueDefinitionGETResponseExtended
-        else:
-            objSchema = schemas.QueueDefinitionGETResponse
-        select = objSchema.get_select_filter()
         results = []
         for folder in folderlist:  # folderlist will already be the IDs
             try:
-                if filter:
-                    queuedefinitions = uipclient_queuedefinitions.queue_definitions_get(
-                        select=select,
-                        filter=filter,
-                        x_uipath_organization_unit_id=folder,
-                    )
-                else:
-                    queuedefinitions = uipclient_queuedefinitions.queue_definitions_get(
-                        select=select, x_uipath_organization_unit_id=folder
-                    )
-                queuedefinitions = _APIResToList(
-                    response=queuedefinitions, objSchema=objSchema
+                queuedefinitions = uipclient_queuedefinitions.queue_definitions_get(
+                    select=select,
+                    filter=filter,
+                    x_uipath_organization_unit_id=folder,
                 )
+                queuedefinitions = _APIResToList(response=queuedefinitions, objSchema=objSchema)
+                logger.info(f"Retrieved API Info for Queue Definitoins on folder {folder}")
                 results = results + queuedefinitions
             except ApiException as e:
-                logger.error(
-                    f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}"
-                )
-                raise e
-            try:
-                crudobject = crud.uip_queue_definitions
-                _CRUDHelper(
-                    crudobject=crudobject, upsert=upsert, db=db, obj_in=queuedefinitions
-                )
-            except Exception as e:
-                logger.error(f"Error when updating database: Processes: {e}")
-                raise e
+                logger.error(f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}")
+        try:
+            crudobject = crud.uip_queue_definitions
+            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
+            logger.info("Updated QueueDefinitions in DB")
+        except Exception as e:
+            logger.error(f"Error when updating database: QueueDefinitions: {e}")
+            raise e
     logger.info("QueueDefinitions refreshed")
     return results
 
@@ -355,8 +343,8 @@ def fetchqueuedefinitions(
 def fetchqueueitems(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: list[int] = None,
-    filter: str = None,
+    folderlist: list[int] | None = None,
+    filter: str | None = None,
     synctimes: bool = False,
 ) -> Any:
     """Get QueueItems and save in DB (optional). Set formdata.cruddb to True
@@ -373,43 +361,31 @@ def fetchqueueitems(
     else:
         objSchema = schemas.QueueItemGETResponse
     folderlist = validate_or_default_folderlist(folderlist)
+    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
+    select = objSchema.get_select_filter()
     logger.info("Refreshing Queue Items")
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        select = objSchema.get_select_filter()
         results = []
         if synctimes:
             lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
-            filter = (
-                f"StartProcessing gt {lastsynctime.isoformat()}Z"
-                if lastsynctime
-                else None
-            )
+            filter = f"StartProcessing gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
             try:
-                if filter:
-                    queueitems = uipclient_queueuitems.queue_items_get(
-                        select=select,
-                        filter=filter,
-                        x_uipath_organization_unit_id=folder,
-                    )
-                else:
-                    queueitems = uipclient_queueuitems.queue_items_get(
-                        select=select, x_uipath_organization_unit_id=folder
-                    )
+                queueitems = uipclient_queueuitems.queue_items_get(
+                    select=select,
+                    filter=filter,
+                    x_uipath_organization_unit_id=folder,
+                )
                 queueitems = _APIResToList(response=queueitems, objSchema=objSchema)
                 results = results + queueitems
             except ApiException as e:
-                logger.error(
-                    f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}"
-                )
+                logger.error(f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}")
                 raise e
             try:
                 crudobject = crud.uip_queue_item
-                _CRUDHelper(
-                    crudobject=crudobject, upsert=upsert, db=db, obj_in=queueitems
-                )
+                _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=queueitems)
             except Exception as e:
                 logger.error(f"Error when updating database: QueueItems: {e}")
                 raise e
@@ -427,8 +403,8 @@ def fetchqueueitems(
 def fetchqueueitemevents(
     upsert: bool = True,
     fulldata: bool = True,
-    folderlist: list[int] = None,
-    filter: str = None,
+    folderlist: list[int] | None = None,
+    filter: str | None = None,
     synctimes: bool = False,
 ) -> Any:
     """Get Queue Item Events and save in DB (optional). Set formdata.cruddb to True
@@ -446,46 +422,34 @@ def fetchqueueitemevents(
     else:
         objSchema = schemas.QueueItemEventGETResponse
     folderlist = validate_or_default_folderlist(folderlist)
+    select = objSchema.get_select_filter()
+    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
-        select = objSchema.get_select_filter()
-        results: list[
-            schemas.QueueItemEventGETResponseExtended
-            | schemas.QueueItemEventGETResponse
-        ] = []
+        results: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse] = []
         if synctimes:
             lastsynctime = crud.tracked_synctimes.get_queueitemevent(db=db)
-            filter = (
-                f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
-            )
+            filter = f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
         for folder in folderlist:  # folderlist will already be the IDs
             try:
-                if filter:
-                    queueitems = uipclient_queueuitemevents.queue_item_events_get(
-                        select=select,
-                        filter=filter,
-                        x_uipath_organization_unit_id=folder,
-                    )
-                else:
-                    queueitems = uipclient_queueuitemevents.queue_item_events_get(
-                        select=select, x_uipath_organization_unit_id=folder
-                    )
+                queueitems = uipclient_queueuitemevents.queue_item_events_get(
+                    select=select,
+                    filter=filter,
+                    x_uipath_organization_unit_id=folder,
+                )
                 queueitems = _APIResToList(response=queueitems, objSchema=objSchema)
                 results = results + queueitems
             except ApiException as e:
-                logger.error(
-                    f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}"
-                )
+                logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
                 raise e
 
     if results:
         # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
         sync_events_to_items(queueitemevents=results)
-        # for res in results:
         try:
             crudobject = crud.uip_queue_item_event
-            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
+            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)  # type: ignore
         except Exception as e:
             logger.error(f"Error when updating database: QueueItemEvents: {e}")
             raise e
@@ -496,7 +460,9 @@ def fetchqueueitemevents(
     return results
 
 
-def sync_events_to_items(queueitemevents: schemas.QueueItemEventGETResponse = None):
+def sync_events_to_items(
+    queueitemevents: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse],
+):
     """This function syncs the queueitemevents to the state in the DB The business logic is:
         - If the item is NOT in the database, it needs to be inserted.
             In order to do that, we retrieve its full data (API -> GetQueueItem) and upsert
@@ -519,9 +485,7 @@ def sync_events_to_items(queueitemevents: schemas.QueueItemEventGETResponse = No
     unique_qitem_ids = list(set(item.QueueItemId for item in queueitemevents))
     with get_db() as db:
         # Split queueitemevents into two buckets: One for items that are not in DB and one that are in DB (based on QueueItemId)
-        existing_ids, ids_not_in_db = crud.uip_queue_item.get_by_id_list_split(
-            db=db, ids=unique_qitem_ids
-        )
+        existing_ids, ids_not_in_db = crud.uip_queue_item.get_by_id_list_split(db=db, ids=unique_qitem_ids)
         # Get New
     if ids_not_in_db:
         logger.info("Getting new queue items")
@@ -540,9 +504,7 @@ def sync_events_to_items(queueitemevents: schemas.QueueItemEventGETResponse = No
 # -----------Sessions
 # --------------------
 @celery_app.task(acks_late=True)
-def fetchsessions(
-    upsert: bool = True, fulldata: bool = True, filter: str = None
-) -> Any:
+def fetchsessions(upsert: bool = True, fulldata: bool = True, filter: str | None = None) -> Any:
     """Get sessions and save in DB (optional). Set formdata.cruddb to True
 
     Args:
@@ -553,32 +515,29 @@ def fetchsessions(
         sessions: List of sessions (Pydantic models)
     """
     logger.info("Refreshing sessions")
+    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
+    if fulldata:
+        objSchema = schemas.SessionGETResponseExtended
+    else:
+        objSchema = schemas.SessionGETResponse
+    select = objSchema.get_select_filter()
+    runtime_type = "Unattended"  # TODO Settings?
     with get_db() as db:
-        if fulldata:
-            objSchema = schemas.SessionGETResponseExtended
-        else:
-            objSchema = schemas.SessionGETResponse
-        select = objSchema.get_select_filter()
-        runtime_type = "Unattended"
         try:
-            if filter:
-                sessions = uipclient_sessions.sessions_get_machine_session_runtimes(
-                    select=select, filter=filter, runtime_type=runtime_type
-                )
-            else:
-                sessions = uipclient_sessions.sessions_get_machine_session_runtimes(
-                    select=select, runtime_type=runtime_type
-                )
+            sessions = uipclient_sessions.sessions_get_machine_session_runtimes(
+                select=select, filter=filter, runtime_type=runtime_type
+            )
             sessions = _APIResToList(response=sessions, objSchema=objSchema)
+            logger.info("Sessions API INfo retrieved")
         except ApiException as e:
             logger.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
             raise e
         try:
             crudobject = crud.uip_session
             _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=sessions)
+            logger.info("Sessions updated in DB")
         except Exception as e:
             logger.error(f"Error when updating database: Sessions: {e}")
             raise e
     logger.info("sessions refreshed")
-    return sessions
     return sessions

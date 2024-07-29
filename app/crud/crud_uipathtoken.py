@@ -23,10 +23,7 @@ class CRUDUIPathToken(CRUDBase[UIPathToken, UIPathTokenResponse, UIPathTokenBear
     def get(self, db: Session, *, scope=default_scope) -> str:
         # TODO implement scope: filter(UIPathToken.is_valid(), UIPathToken.scope.like('%OR%')
         return (
-            db.query(UIPathToken)
-            .filter(UIPathToken.is_valid(UIPathToken))
-            .first()
-            .access_token  # type: ignore
+            db.query(UIPathToken).filter(UIPathToken.is_valid(UIPathToken)).first().access_token  # type: ignore
         )
 
     def remove_expired(self, db: Session):
