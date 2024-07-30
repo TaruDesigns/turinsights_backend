@@ -1,10 +1,11 @@
 from __future__ import with_statement
 
 import os
+from logging.config import fileConfig
+
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
-from logging.config import fileConfig
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -20,8 +21,9 @@ fileConfig(config.config_file_name)
 # target_metadata = mymodel.Base.metadata
 # target_metadata = None
 
-from app.db.base import Base  # noqa
 from celery.backends.database.session import ResultModelBase
+
+from app.db.base import Base  # noqa
 
 target_metadata = [Base.metadata, ResultModelBase.metadata]
 
@@ -34,8 +36,14 @@ target_metadata = [Base.metadata, ResultModelBase.metadata]
 def get_url():
     user = os.getenv("POSTGRES_USER", "postgres")
     password = os.getenv("POSTGRES_PASSWORD", "")
-    server = os.getenv("POSTGRES_SERVER", "db")
+    if password == "":
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        password = os.getenv("POSTGRES_PASSWORD", "")
+    server = os.getenv("POSTGRES_SERVER", "")
     db = os.getenv("POSTGRES_DB", "app")
+    print(f"postgresql://{user}:{password}@{server}/{db}")
     return f"postgresql://{user}:{password}@{server}/{db}"
 
 

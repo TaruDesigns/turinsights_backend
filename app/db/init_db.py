@@ -21,6 +21,7 @@ def init_db(db: Session) -> None:
         # Create superuser auth
         logger.info("Adding superuser to DB")
         user_in = schemas.UserCreate(
+            full_name="superuser",
             email=settings.FIRST_SUPERUSER,
             password=settings.FIRST_SUPERUSER_PASSWORD,
             is_superuser=True,

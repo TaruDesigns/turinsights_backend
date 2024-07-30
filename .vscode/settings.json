@@ -18,7 +18,7 @@
         "imports":true,
         ".flake8":true,
         ".python-version":true,
-        "alembic.ini":true,
+        //"alembic.ini":true,
         "mypy.ini":true,
         "poetry.lock":true,
         "pyproject.toml":true,
