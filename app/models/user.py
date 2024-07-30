@@ -36,4 +36,4 @@ class User(Base):
         back_populates="authenticates",
         lazy="dynamic",  # type: ignore
     )
-    items = relationship("Item", back_populates="owner")
+    # items = relationship("Item", back_populates="owner")
