@@ -1,8 +1,8 @@
 import datetime
-import logging
 from enum import IntEnum, unique
 from typing import Any, Optional
 
+from loguru import logger
 from odata_query.sqlalchemy import apply_odata_query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,24 +34,16 @@ class CRUDTrackedProcess(
     def get(self, db: Session, id: Any) -> Optional[trackschemas.TrackedProcess]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
-    def get_odata(
-        self, db: Session, filter: str
-    ) -> Optional[trackschemas.TrackedProcess]:
+    def get_odata(self, db: Session, filter: str) -> Optional[trackschemas.TrackedProcess]:
         query = apply_odata_query(select(self.model), filter)
         return db.execute(query).scalars().all()
 
 
-class CRUDTrackedQueue(
-    CRUDBase[
-        uipmodels.TrackedQueue, trackschemas.TrackedQueue, trackschemas.TrackedQueue
-    ]
-):
+class CRUDTrackedQueue(CRUDBase[uipmodels.TrackedQueue, trackschemas.TrackedQueue, trackschemas.TrackedQueue]):
     def get(self, db: Session, id: Any) -> Optional[trackschemas.TrackedProcess]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
-    def get_odata(
-        self, db: Session, filter: str
-    ) -> Optional[trackschemas.TrackedQueue]:
+    def get_odata(self, db: Session, filter: str) -> Optional[trackschemas.TrackedQueue]:
         query = apply_odata_query(select(self.model), filter)
         return db.execute(query).scalars().all()
 
@@ -67,9 +59,7 @@ class CRUDSyncTimes(
         try:
             timestamp = self.get(db=db, id=TrackingKeys.QueueItemEvents).TimeStamp
         except Exception as e:
-            logging.error(
-                f"No Synctime found for QueueItemEvents, defaulting to MinTime"
-            )
+            logger.error(f"No Synctime found for QueueItemEvents, defaulting to MinTime")
             timestamp = datetime.datetime(2016, 1, 1)
         return timestamp
 
@@ -79,13 +69,13 @@ class CRUDSyncTimes(
             TimeStamp=newtime,
             Description="QueueItemEvents",
         )
-        return self.upsert(db=db, obj_in=schematoupdate)
+        return self.upsert(db=db, obj_in=schematoupdate)  # type: ignore
 
     def get_queueitemnew(self, db: Session) -> datetime.datetime:
         try:
-            timestamp = self.get(db=db, id=TrackingKeys.QueueItemsNew).TimeStamp
+            timestamp = self.get(db=db, id=TrackingKeys.QueueItemsNew).TimeStamp  # type: ignore
         except Exception as e:
-            logging.error(f"No Synctime found for QueueItemsNew, defaulting to MinTime")
+            logger.error(f"No Synctime found for QueueItemsNew, defaulting to MinTime")
             timestamp = datetime.datetime(2016, 1, 1)
         return timestamp
 
@@ -99,9 +89,9 @@ class CRUDSyncTimes(
 
     def get_jobsstarted(self, db: Session) -> datetime.datetime:
         try:
-            timestamp = self.get(db=db, id=TrackingKeys.JobsStarted).TimeStamp
+            timestamp = self.get(db=db, id=TrackingKeys.JobsStarted).TimeStamp  # type: ignore
         except Exception as e:
-            logging.error(f"No Synctime found for Jobs Started, defaulting to MinTime")
+            logger.error(f"No Synctime found for Jobs Started, defaulting to MinTime")
             timestamp = datetime.datetime(2016, 1, 1)
         return timestamp
 
@@ -111,7 +101,7 @@ class CRUDSyncTimes(
             TimeStamp=newtime,
             Description="JobsStarted",
         )
-        return self.upsert(db=db, obj_in=schematoupdate)
+        return self.upsert(db=db, obj_in=schematoupdate)  # type: ignore
 
 
 tracked_process = CRUDTrackedProcess(uipmodels.TrackedProcess)

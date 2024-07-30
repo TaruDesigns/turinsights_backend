@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -14,7 +15,7 @@ class RefreshTokenCreate(RefreshTokenBase):
 
 
 class RefreshTokenUpdate(RefreshTokenBase):
-    is_valid: bool = Field(..., description="Deliberately disable a refresh token.")
+    is_valid: bool = Field(..., description="Deliberately disable a refresh token.")  # type: ignore
 
 
 class RefreshToken(RefreshTokenUpdate):
@@ -41,3 +42,18 @@ class MagicTokenPayload(BaseModel):
 
 class WebToken(BaseModel):
     claim: str
+
+
+# Schemas for the UIPath Authentication
+
+
+class UIPathTokenResponse(BaseModel):
+    access_token: str
+    expires_in: int
+    token_type: str
+    scope: str
+    expires_at: datetime
+
+
+class UIPathTokenBearer(BaseModel):
+    access_token: str

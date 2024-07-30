@@ -19,9 +19,7 @@ def test_celery(
     """
     Test Celery worker.
     """
-    a = celery_app.send_task(
-        "app.worker.tests.test_celery", args=[msg.msg], countdown=3
-    )
+    a = celery_app.send_task("app.worker.tests.test_celery", args=[msg.msg], countdown=3)
     print(a)
     return {"msg": "Word received"}
 
@@ -34,9 +32,7 @@ def test_celery_uipath(
     """
     Test Celery worker.
     """
-    a = celery_app.send_task(
-        "app.worker.tests.call_endpoint", args=[msg.msg], countdown=3
-    )
+    a = celery_app.send_task("app.worker.tests.call_endpoint", args=[msg.msg], countdown=3)
     return {"msg": "Word received"}
 
 

@@ -13,9 +13,7 @@ class BaseApiModel(BaseModel):
     """
 
     @classmethod
-    def parse_from_swagger(
-        cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]
-    ) -> "Any":
+    def parse_from_swagger(cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]) -> "Any":
         mapped_values = {}
         for key, value in res_values.items():
             mapped_key = attribute_map.get(key, key)

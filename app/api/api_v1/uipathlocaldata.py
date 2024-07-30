@@ -1,7 +1,7 @@
-import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from loguru import logger
 from sqlalchemy.orm import Session
 
 import app.worker.uipath
@@ -266,7 +266,7 @@ def fetchtoken() -> schemas.UIPathTokenResponse:
     try:
         resp = FetchUIPathToken()
     except Exception as e:
-        logging.error(f"Exception when getting token from UIPATH {e}")
+        logger.error(f"Exception when getting token from UIPATH {e}")
         raise HTTPException(
             status_code=409,
             detail="Could not request data to UIPath. Not authenticated",
@@ -287,10 +287,8 @@ def gettoken() -> Any:
     try:
         token = GetUIPathToken()
     except Exception as e:
-        logging.error(f"Exception when getting token from database {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not retrieve token from database."
-        )
+        logger.error(f"Exception when getting token from database {e}")
+        raise HTTPException(status_code=409, detail="Could not retrieve token from database.")
     return token
 
 

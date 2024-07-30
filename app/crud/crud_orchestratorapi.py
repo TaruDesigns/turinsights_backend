@@ -9,50 +9,30 @@ import app.schemas.orchestratorapi as uipschemas
 from app.crud.base import CRUDBase
 
 
-class CRUDFolder(
-    CRUDBase[uipmodels.Folder, uipschemas.FolderCreate, uipschemas.FolderCreate]
-):
-    def get_by_fullyqualifiedname(
-        self, db: Session, *, fullyqualifiedname: str
-    ) -> Optional[uipmodels.Folder]:
-        return (
-            db.query(uipmodels.Folder)
-            .filter(uipmodels.Folder.FullyQualifiedName == fullyqualifiedname)
-            .first()
-        )
+class CRUDFolder(CRUDBase[uipmodels.Folder, uipschemas.FolderCreate, uipschemas.FolderCreate]):
+    def get_by_fullyqualifiedname(self, db: Session, *, fullyqualifiedname: str) -> Optional[uipmodels.Folder]:
+        return db.query(uipmodels.Folder).filter(uipmodels.Folder.FullyQualifiedName == fullyqualifiedname).first()
 
     def get(self, db: Session, id: Any) -> Optional[uipmodels.Folder]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.Folder]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
 
-class CRUDQueueItem(
-    CRUDBase[
-        uipmodels.QueueItem, uipschemas.QueueItemCreate, uipschemas.QueueItemUpdate
-    ]
-):
-    def get_by_reference(
-        self, db: Session, *, reference: str
-    ) -> Optional[uipmodels.QueueItem]:
-        return (
-            db.query(uipmodels.QueueItem)
-            .filter(uipmodels.QueueItem.Reference == reference)
-            .first()
-        )
+class CRUDQueueItem(CRUDBase[uipmodels.QueueItem, uipschemas.QueueItemCreate, uipschemas.QueueItemUpdate]):
+    def get_by_reference(self, db: Session, *, reference: str) -> Optional[uipmodels.QueueItem]:
+        return db.query(uipmodels.QueueItem).filter(uipmodels.QueueItem.Reference == reference).first()
 
     def get(self, db: Session, id: Any) -> Optional[uipmodels.QueueItem]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.QueueItem]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
-    def get_by_id_list_split(
-        self, db: Session, ids: list[int]
-    ) -> Tuple[list[int], list[int]]:
+    def get_by_id_list_split(self, db: Session, ids: list[int]) -> Tuple[list[int], list[int]]:
         """This is a helper function to return which IDs are present in the database and which are not, based on an input list of IDs
         get_odata kind of replaces this but this one is more direct without dependencies
         Args:
@@ -77,9 +57,7 @@ class CRUDQueueItemEvent(
         uipschemas.QueueItemEventCreate,
     ]
 ):
-    def justpass(
-        self, db: Session, *, fullyqualifiedname: str
-    ) -> Optional[uipmodels.QueueItemEvent]:
+    def justpass(self, db: Session, *, fullyqualifiedname: str) -> Optional[uipmodels.QueueItemEvent]:
         pass
 
     def get(self, db: Session, id: Any) -> Optional[uipmodels.QueueItemEvent]:
@@ -87,7 +65,7 @@ class CRUDQueueItemEvent(
 
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.QueueItemEvent]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
 
 class CRUDQueueDefinitions(
@@ -97,27 +75,19 @@ class CRUDQueueDefinitions(
         uipschemas.QueueDefinitionUpdate,
     ]
 ):
-    def justpass(
-        self, db: Session, *, fullyqualifiedname: str
-    ) -> Optional[uipmodels.QueueDefinitions]:
+    def justpass(self, db: Session, *, fullyqualifiedname: str) -> Optional[uipmodels.QueueDefinitions]:
         pass
 
     def get(self, db: Session, id: Any) -> Optional[uipmodels.QueueDefinitions]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
-    def get_odata(
-        self, db: Session, filter: str
-    ) -> Optional[uipmodels.QueueDefinitions]:
+    def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.QueueDefinitions]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
 
-class CRUDSession(
-    CRUDBase[uipmodels.Sessions, uipschemas.SessionCreate, uipschemas.SessionUpdate]
-):
-    def justpass(
-        self, db: Session, *, fullyqualifiedname: str
-    ) -> Optional[uipmodels.Sessions]:
+class CRUDSession(CRUDBase[uipmodels.Sessions, uipschemas.SessionCreate, uipschemas.SessionUpdate]):
+    def justpass(self, db: Session, *, fullyqualifiedname: str) -> Optional[uipmodels.Sessions]:
         pass
 
     def get(self, db: Session, id: Any) -> Optional[uipmodels.Sessions]:
@@ -125,12 +95,10 @@ class CRUDSession(
 
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.Sessions]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
 
-class CRUDProcess(
-    CRUDBase[uipmodels.Process, uipschemas.ProcessCreate, uipschemas.ProcessUpdate]
-):
+class CRUDProcess(CRUDBase[uipmodels.Process, uipschemas.ProcessCreate, uipschemas.ProcessUpdate]):
     def get_by_key(self, db: Session, *, key: str) -> Optional[uipmodels.Process]:
         return db.query(uipmodels.Process).filter(uipmodels.Process.Key == key).first()
 
@@ -139,31 +107,25 @@ class CRUDProcess(
 
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.Process]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
 
 class CRUDJob(CRUDBase[uipmodels.Job, uipschemas.JobCreate, uipschemas.JobUpdate]):
-    def get_by_releasename(
-        self, db: Session, *, releasename: str
-    ) -> Optional[uipmodels.Job]:
-        return (
-            db.query(uipmodels.Job)
-            .filter(uipmodels.Job.ReleaseName == releasename)
-            .first()
-        )
+    def get_by_releasename(self, db: Session, *, releasename: str) -> Optional[uipmodels.Job]:
+        return db.query(uipmodels.Job).filter(uipmodels.Job.ReleaseName == releasename).first()
 
     def get(self, db: Session, id: Any) -> Optional[uipmodels.Job]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
     def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.Job]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type: ignore
 
 
-folder = CRUDFolder(uipmodels.Folder)
-queue_item = CRUDQueueItem(uipmodels.QueueItem)
-queue_item_event = CRUDQueueItemEvent(uipmodels.QueueItemEvent)
-queue_definitions = CRUDQueueDefinitions(uipmodels.QueueDefinitions)
-process = CRUDProcess(uipmodels.Process)
-job = CRUDJob(uipmodels.Job)
-session = CRUDSession(uipmodels.Sessions)
+uip_folder = CRUDFolder(uipmodels.Folder)
+uip_queue_item = CRUDQueueItem(uipmodels.QueueItem)
+uip_queue_item_event = CRUDQueueItemEvent(uipmodels.QueueItemEvent)
+uip_queue_definitions = CRUDQueueDefinitions(uipmodels.QueueDefinitions)
+uip_process = CRUDProcess(uipmodels.Process)
+uip_job = CRUDJob(uipmodels.Job)
+uip_session = CRUDSession(uipmodels.Sessions)

@@ -9,9 +9,7 @@ from app import crud, models, schemas
 from app.api import deps
 from app.core import security
 from app.core.config import settings
-from app.utilities import (
-    send_new_account_email,
-)
+from app.utilities import send_new_account_email
 
 router = APIRouter()
 
@@ -51,12 +49,12 @@ def update_user(
     """
     if current_user.hashed_password:
         user = crud.user.authenticate(
-            db, email=current_user.email, password=obj_in.original
+            db,
+            email=current_user.email,
+            password=obj_in.original,  # type: ignore
         )
         if not obj_in.original or not user:
-            raise HTTPException(
-                status_code=400, detail="Unable to authenticate this update."
-            )
+            raise HTTPException(status_code=400, detail="Unable to authenticate this update.")
     current_user_data = jsonable_encoder(current_user)
     user_in = schemas.UserUpdate(**current_user_data)
     if obj_in.password is not None:
@@ -152,7 +150,9 @@ def create_user(
     user = crud.user.create(db, obj_in=user_in)
     if settings.EMAILS_ENABLED and user_in.email:
         send_new_account_email(
-            email_to=user_in.email, username=user_in.email, password=user_in.password
+            email_to=user_in.email,
+            username=user_in.email,
+            password=user_in.password,  # type: ignore
         )
     return user
 

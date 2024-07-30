@@ -34,7 +34,7 @@ def getprocesses(
             raise HTTPException(status_code=401, detail="Invalid OData Query")
     else:
         try:
-            return crud.tracked_process.get_multi(db=db, skip=skip, limit=top)
+            return crud.tracked_process.get_multi(db=db, skip=skip, limit=top)  # type: ignore
         except Exception as e:
             raise HTTPException(status_code=503, detail="Error retrieving data")
 
@@ -63,7 +63,7 @@ def getqueues(
             raise HTTPException(status_code=401, detail="Invalid OData Query")
     else:
         try:
-            return crud.tracked_queue.get_multi(db=db, skip=skip, limit=top)
+            return crud.tracked_queue.get_multi(db=db, skip=skip, limit=top)  # type: ignore
         except Exception as e:
             raise HTTPException(status_code=503, detail="Error retrieving data")
 
@@ -71,9 +71,7 @@ def getqueues(
 # Add Post Endpoint. This will be used to add a new process to the database
 # Endpoint will add a new process to the database
 @router.post("/processes", response_model=schemas.TrackedProcess, status_code=201)
-def addprocess(
-    process: schemas.TrackedProcess, db: Session = Depends(deps.get_db)
-) -> Any:
+def addprocess(process: schemas.TrackedProcess, db: Session = Depends(deps.get_db)) -> Any:
     """Add a new process to the database
 
     Args:
@@ -93,12 +91,8 @@ def addprocess(
 
 # Add Patch endpoint. It will be used to update a process in the database
 # Endpoint will update a process in the database
-@router.put(
-    "/processes/{process_id}", response_model=schemas.TrackedProcess, status_code=201
-)
-def updateprocess(
-    process_id: int, process: schemas.TrackedProcess, db: Session = Depends(deps.get_db)
-) -> Any:
+@router.put("/processes/{process_id}", response_model=schemas.TrackedProcess, status_code=201)
+def updateprocess(process_id: int, process: schemas.TrackedProcess, db: Session = Depends(deps.get_db)) -> Any:
     """Update a process in the database
 
     Args:
@@ -109,7 +103,7 @@ def updateprocess(
         results: List of Jobs (Pydantic models)
     """
     try:
-        return crud.tracked_process.update(db=db, db_obj=process, obj_in=process)
+        return crud.tracked_process.update(db=db, db_obj=process, obj_in=process)  # type: ignore
     except IntegrityError as e:
         raise HTTPException(status_code=503, detail="Error updating record")
     except Exception as e:
@@ -117,12 +111,8 @@ def updateprocess(
 
 
 # Add Patch endpoint to toggle process tracking. Set enable to true/false to enable/disable tracking
-@router.patch(
-    "/processes/{process_id}", response_model=schemas.TrackedProcess, status_code=201
-)
-def toggleprocess(
-    process_id: int, enable: bool, db: Session = Depends(deps.get_db)
-) -> Any:
+@router.patch("/processes/{process_id}", response_model=schemas.TrackedProcess, status_code=201)
+def toggleprocess(process_id: int, enable: bool, db: Session = Depends(deps.get_db)) -> Any:
     """Toggle process tracking
 
     Args:
@@ -133,7 +123,7 @@ def toggleprocess(
         results: List of Jobs (Pydantic models)
     """
     try:
-        return crud.tracked_process.toggle(db=db, process_id=process_id, enable=enable)
+        return crud.tracked_process.toggle(db=db, process_id=process_id, enable=enable)  # type: ignore
     except IntegrityError as e:
         raise HTTPException(status_code=503, detail="Error updating record")
     except Exception as e:

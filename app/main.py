@@ -1,7 +1,7 @@
-import logging
 from time import sleep
 
 from fastapi import FastAPI
+from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
 
 from app.api.api_v1.mainrouter import api_router
@@ -49,9 +49,10 @@ async def redirect_typer():
 
 @app.on_event("startup")
 async def startscheduler():
-    logging.info("Starting scheduler...")
+    logger.info("Starting scheduler...")
     scheduler.start()
     start_basic_schedules()
+    logger.info("Schedule started")
 
 
 if __name__ == "__main__":

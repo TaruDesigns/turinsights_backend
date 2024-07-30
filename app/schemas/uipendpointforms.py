@@ -3,6 +3,8 @@ from typing import List, Optional
 from fastapi import Query
 from pydantic import BaseModel
 
+# Helper Schemas for the endpoints of the backend
+
 
 class ODataForm(BaseModel):
     filter: Optional[str] = Query()

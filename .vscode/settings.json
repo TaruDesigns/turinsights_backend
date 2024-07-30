@@ -11,6 +11,10 @@
         "**/**email-templates**":true,
         "**/**core**":true,
         //"**/db":true,
+        "**/totp.py":true,
+        "**/token.py":true,
+        "**/msg.py":true,
+        "**/emails.py":true,
         "imports":true,
         ".flake8":true,
         ".python-version":true,
@@ -24,7 +28,7 @@
         //"**dockerfile**":true,
         "docker-compose.yml":true,
         ".dockerignore":true,
-        ".env.example":true
+        ".env.example":true,
     },
     "python.analysis.typeCheckingMode": "basic"
 }

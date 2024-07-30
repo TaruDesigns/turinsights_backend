@@ -41,7 +41,6 @@ async def refresh_processes_and_queues() -> None:
 
 
 async def refresh_queueitemevents() -> None:
-    # todo CHANGE THIS AND MAKE IT WORK WITH ASYNC
     folderlist = get_folderlist()
     logger.info("Sending Queue Item Event Sync Request")
     kwargs = {

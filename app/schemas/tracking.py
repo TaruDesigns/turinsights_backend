@@ -1,6 +1,7 @@
 import datetime
-from pydantic import UUID4, BaseModel
 from typing import Optional
+
+from pydantic import UUID4, BaseModel
 
 
 class TrackedProcess(BaseModel):

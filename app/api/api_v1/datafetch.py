@@ -1,7 +1,7 @@
-import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from loguru import logger
 from uipath_orchestrator_rest.rest import ApiException
 
 import app.worker.uipath
@@ -33,15 +33,11 @@ def fetchfolders(
         kwargs = {"fulldata": formdata.fulldata, "upsert": formdata.upsert}
         celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
     except ApiException as e:
-        logging.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: Folders: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: Folders"
-        )
+        logger.error(f"Error when updating database: Folders: {e}")
+        raise HTTPException(status_code=409, detail="Could not update database: Folders")
     return {"msg": "Request accepted"}
 
 
@@ -81,12 +77,10 @@ def fetchjobs(
         }
         celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
     except ApiException as e:
-        logging.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: Jobs: {e}")
+        logger.error(f"Error when updating database: Jobs: {e}")
         raise HTTPException(status_code=409, detail="Could not update database: Jobs.")
     return {"msg": "Request accepted"}
 
@@ -117,15 +111,11 @@ def fetchprocesses(
         }
         celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
     except ApiException as e:
-        logging.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: Processes: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: Processes"
-        )
+        logger.error(f"Error when updating database: Processes: {e}")
+        raise HTTPException(status_code=409, detail="Could not update database: Processes")
     return {"msg": "Request accepted"}
 
 
@@ -155,17 +145,11 @@ def fetchqueuedefinitions(
         }
         celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
     except ApiException as e:
-        logging.error(
-            f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}"
-        )
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: Processes: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: QueueDefinitions"
-        )
+        logger.error(f"Error when updating database: Processes: {e}")
+        raise HTTPException(status_code=409, detail="Could not update database: QueueDefinitions")
     return {"msg": "Request accepted"}
 
 
@@ -195,15 +179,11 @@ def fetchqueueitems(
         }
         celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
     except ApiException as e:
-        logging.error(f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: QueueItems: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: QueueItems"
-        )
+        logger.error(f"Error when updating database: QueueItems: {e}")
+        raise HTTPException(status_code=409, detail="Could not update database: QueueItems")
     return {"msg": "Request accepted"}
 
 
@@ -233,15 +213,11 @@ def fetchqueueitemevents(
         }
         celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
     except ApiException as e:
-        logging.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: QueueItemEvents: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: QueueItemEvents"
-        )
+        logger.error(f"Error when updating database: QueueItemEvents: {e}")
+        raise HTTPException(status_code=409, detail="Could not update database: QueueItemEvents")
     return {"msg": "Request accepted"}
 
 
@@ -271,15 +247,11 @@ def fetchsessions(
         }
         celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
     except ApiException as e:
-        logging.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
-        raise HTTPException(
-            status_code=409, detail=f"Could not request data to UIPath: {e.body}"
-        )
+        logger.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
+        raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
     except Exception as e:
-        logging.error(f"Error when updating database: Sessions: {e}")
-        raise HTTPException(
-            status_code=409, detail="Could not update database: Sessions"
-        )
+        logger.error(f"Error when updating database: Sessions: {e}")
+        raise HTTPException(status_code=409, detail="Could not update database: Sessions")
     return {"msg": "Request accepted"}
 
 
@@ -300,7 +272,7 @@ def fetchtoken() -> schemas.UIPathTokenResponse:
     try:
         resp = FetchUIPathToken()
     except Exception as e:
-        logging.error(f"Exception when getting token from UIPATH {e}")
+        logger.error(f"Exception when getting token from UIPATH {e}")
         raise HTTPException(
             status_code=409,
             detail="Could not request data to UIPath. Not authenticated",

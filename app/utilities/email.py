@@ -1,9 +1,9 @@
-import logging
 from pathlib import Path
 from typing import Any, Dict
 
 import emails
 from emails.template import JinjaTemplate
+from loguru import logger
 
 from app.core.config import settings
 from app.schemas import EmailContent, EmailValidation
@@ -34,7 +34,7 @@ def send_email(
     environment["server_name"] = settings.SERVER_NAME
     environment["server_bot"] = settings.SERVER_BOT
     response = message.send(to=email_to, render=environment, smtp=smtp_options)
-    logging.info(f"send email result: {response}")
+    logger.info(f"send email result: {response}")
 
 
 def send_email_validation_email(data: EmailValidation) -> None:
@@ -56,7 +56,7 @@ def send_web_contact_email(data: EmailContent) -> None:
     with open(Path(settings.EMAIL_TEMPLATES_DIR) / "web_contact_email.html") as f:
         template_str = f.read()
     send_email(
-        email_to=settings.EMAILS_TO_EMAIL,
+        email_to=settings.EMAILS_TO_EMAIL,  # type: ignore
         subject_template=subject,
         html_template=template_str,
         environment={"content": data.content, "email": data.email},

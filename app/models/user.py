@@ -16,12 +16,8 @@ if TYPE_CHECKING:
 
 
 class User(Base):
-    id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, index=True, default=uuid4
-    )
-    created: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid4)
+    created: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     modified: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -37,6 +33,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
     is_superuser: Mapped[bool] = mapped_column(default=False)
     refresh_tokens: Mapped[list["Token"]] = relationship(
-        back_populates="authenticates", lazy="dynamic"
+        back_populates="authenticates",
+        lazy="dynamic",  # type: ignore
     )
     items = relationship("Item", back_populates="owner")

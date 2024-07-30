@@ -1,4 +1,6 @@
-import schemas
+# PENDING IMPLEMENTATION
+"""
+from app import schemas
 
 
 def route_job(payload: schemas.JobPayload):
@@ -57,3 +59,4 @@ def route_queueitem(payload: schemas.QueueItemPayload):
     else:
         ...
     ...
+"""

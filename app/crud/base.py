@@ -1,7 +1,7 @@
-import logging
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 
 from fastapi.encoders import jsonable_encoder
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
@@ -29,9 +29,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     def get(self, db: Session, id: Any) -> Optional[ModelType]:
         return db.query(self.model).filter(self.model.id == id).first()
 
-    def get_multi(
-        self, db: Session, *, skip: int = 0, limit: int = 100
-    ) -> List[ModelType]:
+    def get_multi(self, db: Session, *, skip: int | None = 0, limit: int | None = 100) -> List[ModelType]:
         return db.query(self.model).offset(skip).limit(limit).all()
 
     def create(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
@@ -75,7 +73,7 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db.execute(stmt)
         db.commit()
 
-    def upsert(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
+    def upsert(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType | None:
         """Helper function to "Upsert" -> If item is not created, create it
         If it already exists, just update it"""
         obj_in_data = jsonable_encoder(obj_in)
@@ -86,14 +84,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return db_obj
         except IntegrityError as e:
             db.rollback()
-            logging.error(e)
+            logger.error(e)
 
-    def create_safe(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType:
+    def create_safe(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType | None:
         """Helper function to "Create and ignore duplicate errors"""
         try:
             db_obj = self.create(db=db, obj_in=obj_in)
             return db_obj
         except IntegrityError as e:
             db.rollback()
-            logging.warn(e)
+            logger.warning(e)
             return None

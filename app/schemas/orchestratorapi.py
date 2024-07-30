@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import UUID4, BaseModel
 
+# Schemas for UIpath API Calls
+
 
 class BaseApiModel(BaseModel):
     """Base pydantic model with a json parser for attribute maps.
@@ -15,9 +17,7 @@ class BaseApiModel(BaseModel):
     """
 
     @classmethod
-    def parse_from_swagger(
-        cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]
-    ) -> "Any":
+    def parse_from_swagger(cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]) -> "Any":
         mapped_values = {}
         for key, value in res_values.items():
             mapped_key = attribute_map.get(key, key)
@@ -26,11 +26,7 @@ class BaseApiModel(BaseModel):
 
     def __init__(self, **data):
         for field_name, field in self.__fields__.items():
-            if (
-                field.type_ is datetime
-                and field_name in data
-                and data[field_name] is not None
-            ):
+            if field.type_ is datetime and field_name in data and data[field_name] is not None:
                 from datetime import timezone
 
                 # This is to forze UTC timezones and avoid issues with dateutil.parse trying to assign timezonelocal
@@ -232,17 +228,13 @@ class JobGETResponseExtended(JobGETResponse):
     MaxExpectedRunningTimeSeconds: Optional[int]
 
     @classmethod
-    def parse_from_swagger(
-        cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]
-    ) -> "Any":
+    def parse_from_swagger(cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]) -> "Any":
         """Overload original because Input and OutputArguments need to be parsed"""
         mapped_values = {}
         for key, value in res_values.items():
             mapped_key = attribute_map.get(key, key)
             if mapped_key == "OutputArguments" or mapped_key == "InputArguments":
-                mapped_values[mapped_key] = (
-                    json.loads(value) if value is not None else None
-                )
+                mapped_values[mapped_key] = json.loads(value) if value is not None else None
             else:
                 mapped_values[mapped_key] = value
         return cls(**mapped_values)
@@ -407,5 +399,5 @@ class SessionUpdate(SessionGETResponseExtended):
 
 
 # ----------------------------------------
-# ------XXXX MODELS---------------
+# ------XXXX SCHEMAS---------------
 # ----------------------------------------
