@@ -8,36 +8,36 @@ from celery.result import AsyncResult
 from loguru import logger
 from pydantic import BaseModel, validator
 
+import app.worker.uipath as uipathtasks
 from app.api.deps import DBContext
 from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.crud import uip_folder
-from app.worker.uipath import FetchUIPathToken
 
 jobstore = JobStore(url=settings.SQLALCHEMY_DATABASE_URI)
 scheduler = Scheduler(jobstores={"default": jobstore})
 
 
 async def refresh_token() -> None:
-    token = FetchUIPathToken()
-    celerytoken = celery_app.send_task("app.worker.uipath.GetUIPathToken")
+    token = uipathtasks.FetchUIPathToken()
+    uipathtasks.GetUIPathToken.apply_async()
 
 
 async def refresh_folders() -> None:
     kwargs = {"fulldata": True, "upsert": True}
-    celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
+    uipathtasks.fetchfolders.apply_async(kwargs=kwargs)
 
 
 async def refresh_sessions() -> None:
     kwargs = {"fulldata": True, "filter": None}
-    celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
+    uipathtasks.fetchsessions.apply_async(kwargs=kwargs)
 
 
 async def refresh_processes_and_queues() -> None:
     folderlist = get_folderlist()
     kwargs = {"fulldata": True, "folderlist": folderlist, "filter": None}
-    celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
-    celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
+    uipathtasks.fetchprocesses.apply_async(kwargs=kwargs)
+    uipathtasks.fetchqueuedefinitions.apply_async(kwargs=kwargs)
 
 
 async def refresh_queueitemevents() -> None:
@@ -49,7 +49,7 @@ async def refresh_queueitemevents() -> None:
         "filter": None,
         "synctimes": True,
     }
-    celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
+    uipathtasks.fetchqueueitemevents.apply_async(kwargs=kwargs)
 
 
 async def refresh_queueitemnew() -> None:
@@ -61,7 +61,7 @@ async def refresh_queueitemnew() -> None:
         "filter": None,
         "synctimes": True,
     }
-    celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
+    uipathtasks.fetchqueueitems.apply_async(kwargs=kwargs)
 
 
 async def refresh_jobstarted() -> None:
@@ -73,7 +73,7 @@ async def refresh_jobstarted() -> None:
         "filter": None,
         "synctimes": True,
     }
-    celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
+    uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
 
 
 async def wait_for_result(result: AsyncResult, timeout: int = 30):
@@ -109,15 +109,15 @@ class Schedule(BaseModel):
 # Main Schedules dict.
 schedules = {
     "main_uip_token_refresh": Schedule(seconds=150, taskid="main_uip_token_refresh", taskfunction=refresh_token),
-    "main_folder_refresh": Schedule(seconds=30, taskid="main_folder_refresh", taskfunction=refresh_folders),
-    "main_sessions_refresh": Schedule(seconds=30, taskid="main_sessions_refresh", taskfunction=refresh_sessions),
+    "main_folder_refresh": Schedule(seconds=300, taskid="main_folder_refresh", taskfunction=refresh_folders),
+    "main_sessions_refresh": Schedule(seconds=300, taskid="main_sessions_refresh", taskfunction=refresh_sessions),
     "main_processesandqueues_refresh": Schedule(
-        seconds=30, taskid="main_processesandqueues_refresh", taskfunction=refresh_processes_and_queues
+        seconds=300, taskid="main_processesandqueues_refresh", taskfunction=refresh_processes_and_queues
     ),
     "main_queueitemevent_refresh": Schedule(
-        seconds=15, taskid="main_queueitemevent_refresh", taskfunction=refresh_queueitemevents
+        seconds=150, taskid="main_queueitemevent_refresh", taskfunction=refresh_queueitemevents
     ),
-    "main_jobstarted_refresh": Schedule(seconds=15, taskid="main_jobstarted_refresh", taskfunction=refresh_jobstarted),
+    "main_jobstarted_refresh": Schedule(seconds=150, taskid="main_jobstarted_refresh", taskfunction=refresh_jobstarted),
 }
 
 

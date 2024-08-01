@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from uipath_orchestrator_rest.rest import ApiException
 
-import app.worker.uipath
+import app.worker.uipath as uipathtasks
 from app import crud, schemas
 from app.core.celery_app import celery_app
-from app.worker.uipath import FetchUIPathToken
 
 router = APIRouter()
 
@@ -31,7 +30,8 @@ def fetchfolders(
     try:
         # Gets folders.
         kwargs = {"fulldata": formdata.fulldata, "upsert": formdata.upsert}
-        celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
+        uipathtasks.fetchfolders.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -75,7 +75,8 @@ def fetchjobs(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
+        uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -109,7 +110,8 @@ def fetchprocesses(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
+        uipathtasks.fetchprocesses.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -143,7 +145,8 @@ def fetchqueuedefinitions(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
+        uipathtasks.fetchqueuedefinitions.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -177,7 +180,8 @@ def fetchqueueitems(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
+        uipathtasks.fetchqueueitems.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -211,7 +215,8 @@ def fetchqueueitemevents(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
+        uipathtasks.fetchqueueitemevents.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -245,7 +250,8 @@ def fetchsessions(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
+        # celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
+        uipathtasks.fetchsessions.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling SessionsAPI->sessions_get {e.body}")
         raise HTTPException(status_code=409, detail=f"Could not request data to UIPath: {e.body}")
@@ -270,7 +276,7 @@ def fetchtoken() -> schemas.UIPathTokenResponse:
         token: string with the access token
     """
     try:
-        resp = FetchUIPathToken()
+        resp = uipathtasks.FetchUIPathToken()
     except Exception as e:
         logger.error(f"Exception when getting token from UIPATH {e}")
         raise HTTPException(
