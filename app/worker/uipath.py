@@ -515,7 +515,7 @@ def fetchsessions(upsert: bool = True, fulldata: bool = True, filter: str | None
         sessions: List of sessions (Pydantic models)
     """
     logger.info("Refreshing sessions")
-    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
+    filter = filter if filter else "SessionId ne 0"  # This is just a hack to avoid having to duplicate code
     if fulldata:
         objSchema = schemas.SessionGETResponseExtended
     else:

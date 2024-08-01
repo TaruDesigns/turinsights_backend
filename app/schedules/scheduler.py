@@ -10,9 +10,8 @@ from pydantic import BaseModel, validator
 
 import app.worker.uipath as uipathtasks
 from app.api.deps import DBContext
-from app.core.celery_app import celery_app
 from app.core.config import settings
-from app.crud import uip_folder
+from app.crud import uip_folder, uip_job
 
 jobstore = JobStore(url=settings.SQLALCHEMY_DATABASE_URI)
 scheduler = Scheduler(jobstores={"default": jobstore})
@@ -76,6 +75,21 @@ async def refresh_jobstarted() -> None:
     uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
 
 
+async def refresh_jobsunfinished() -> None:
+    folderlist = get_folderlist()
+    unfinished_ids = get_unfinishedjobs()
+    if unfinished_ids:
+        filter = f"Id in ({', '.join(str(x) for x in unfinished_ids)})"
+        logger.info("Sending Poll Jobs Unfinished Request")
+        kwargs = {
+            "fulldata": True,
+            "folderlist": folderlist,
+            "filter": filter,
+            "synctimes": False,
+        }
+        uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
+
+
 async def wait_for_result(result: AsyncResult, timeout: int = 30):
     # Use asyncio.to_thread to run the blocking result.ready() in a separate thread
     start_time = datetime.datetime.now()
@@ -92,6 +106,13 @@ def get_folderlist() -> list:
         folderlist = uip_folder.get_multi(db=db)
         folderlist = [folder.Id for folder in folderlist]
     return folderlist
+
+
+def get_unfinishedjobs() -> list[int] | None:
+    # This one needs to be like this because it uses DBContext for APScheduler
+    with DBContext() as db:
+        jobids = uip_job.get_unfinished_jobid(db=db)
+    return jobids
 
 
 class Schedule(BaseModel):
@@ -118,6 +139,9 @@ schedules = {
         seconds=150, taskid="main_queueitemevent_refresh", taskfunction=refresh_queueitemevents
     ),
     "main_jobstarted_refresh": Schedule(seconds=150, taskid="main_jobstarted_refresh", taskfunction=refresh_jobstarted),
+    "main_jobspolled_refresh": Schedule(
+        seconds=150, taskid="main_jobspolled_refresh", taskfunction=refresh_jobsunfinished
+    ),
 }
 
 

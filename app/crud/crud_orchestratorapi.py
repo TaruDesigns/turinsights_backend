@@ -117,9 +117,16 @@ class CRUDJob(CRUDBase[uipmodels.Job, uipschemas.JobCreate, uipschemas.JobUpdate
     def get(self, db: Session, id: Any) -> Optional[uipmodels.Job]:
         return db.query(self.model).filter(self.model.Id == id).first()
 
-    def get_odata(self, db: Session, filter: str) -> Optional[uipmodels.Job]:
+    def get_odata(self, db: Session, filter: str) -> list[uipmodels.Job]:
         query = apply_odata_query(select(self.model), filter)
         return db.execute(query).scalars().all()  # type: ignore
+
+    def get_unfinished_jobid(self, db: Session) -> list[int] | None:
+        # Returns the Ids for the jobs that are not in a finished state so that they can be polled
+        finished_states = ["Faulted", "Successful", "Stopped"]
+        res = db.query(self.model.Id).filter(self.model.State.notin_(finished_states)).all()
+        return [row[0] for row in res] if res else None
+        ...
 
 
 uip_folder = CRUDFolder(uipmodels.Folder)

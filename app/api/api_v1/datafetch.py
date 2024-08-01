@@ -6,7 +6,6 @@ from uipath_orchestrator_rest.rest import ApiException
 
 import app.worker.uipath as uipathtasks
 from app import crud, schemas
-from app.core.celery_app import celery_app
 
 router = APIRouter()
 
@@ -289,4 +288,3 @@ def fetchtoken() -> schemas.UIPathTokenResponse:
 @router.get("/teststuff", response_model=None, status_code=200)
 def teststuff() -> Any:
     folderlist = [2440043, 4572440]
-    app.worker.uipath.fetchsessions(fulldata=True)
