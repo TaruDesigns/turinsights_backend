@@ -8,7 +8,7 @@ from app.db.base_class import Base
 
 
 class UIPathToken(Base):
-    __tablename__ = "uipath_token"
+    __tablename__ = "uipath_token"  # type: ignore
     access_token: Mapped[str] = mapped_column(primary_key=True, index=True)
     expires_in: Mapped[int] = mapped_column(default=3600)
     token_type: Mapped[str] = mapped_column(default="Bearer")

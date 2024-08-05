@@ -26,9 +26,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         db.refresh(db_obj)
         return db_obj
 
-    def update(
-        self, db: Session, *, db_obj: User, obj_in: Union[UserUpdate, Dict[str, Any]]
-    ) -> User:
+    def update(self, db: Session, *, db_obj: User, obj_in: Union[UserUpdate, Dict[str, Any]]) -> User:
         if isinstance(obj_in, dict):
             update_data = obj_in
         else:
@@ -45,9 +43,7 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         user = self.get_by_email(db, email=email)
         if not user:
             return None
-        if not verify_password(
-            plain_password=password, hashed_password=user.hashed_password
-        ):
+        if not verify_password(plain_password=password, hashed_password=user.hashed_password):  # type: ignore
             return None
         return user
 
@@ -69,18 +65,14 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         obj_in["totp_counter"] = None
         return self.update(db=db, db_obj=db_obj, obj_in=obj_in)
 
-    def update_totp_counter(
-        self, db: Session, *, db_obj: User, new_counter: int
-    ) -> User:
+    def update_totp_counter(self, db: Session, *, db_obj: User, new_counter: int) -> User:
         obj_in = UserUpdate(**UserInDB.from_orm(db_obj).dict())
         obj_in = obj_in.dict(exclude_unset=True)
         obj_in["totp_counter"] = new_counter
         return self.update(db=db, db_obj=db_obj, obj_in=obj_in)
 
-    def toggle_user_state(
-        self, db: Session, *, obj_in: Union[UserUpdate, Dict[str, Any]]
-    ) -> User:
-        db_obj = self.get_by_email(db, email=obj_in.email)
+    def toggle_user_state(self, db: Session, *, obj_in: Union[UserUpdate, Dict[str, Any]]) -> User | None:
+        db_obj = self.get_by_email(db, email=obj_in.email)  # type: ignore
         if not db_obj:
             return None
         return self.update(db=db, db_obj=db_obj, obj_in=obj_in)

@@ -13,9 +13,7 @@ from app.schema_types import BaseEnum
 class BaseSchema(BaseModel):
     @property
     def as_db_dict(self):
-        to_db = self.dict(
-            exclude_defaults=True, exclude_none=True, exclude={"identifier, id"}
-        )
+        to_db = self.dict(exclude_defaults=True, exclude_none=True, exclude={"identifier, id"})
         for key in ["id", "identifier"]:
             if key in self.dict().keys():
                 to_db[key] = self.dict()[key].hex
@@ -23,9 +21,7 @@ class BaseSchema(BaseModel):
 
     @property
     def as_neo_dict(self):
-        to_db = self.json(
-            exclude_defaults=True, exclude_none=True, exclude={"identifier, id"}
-        )
+        to_db = self.json(exclude_defaults=True, exclude_none=True, exclude={"identifier, id"})
         to_db = json.loads(to_db)
         self_dict = self.dict()
         for key in self_dict.keys():
@@ -44,16 +40,12 @@ class BaseSchema(BaseModel):
 class MetadataBaseSchema(BaseSchema):
     # Receive via API
     # https://www.dublincore.org/specifications/dublin-core/dcmi-terms/#section-3
-    title: Optional[str] = Field(
-        None, description="A human-readable title given to the resource."
-    )
+    title: Optional[str] = Field(None, description="A human-readable title given to the resource.")
     description: Optional[str] = Field(
         None,
         description="A short description of the resource.",
     )
-    isActive: Optional[bool] = Field(
-        default=True, description="Whether the resource is still actively maintained."
-    )
+    isActive: Optional[bool] = Field(default=True, description="Whether the resource is still actively maintained.")
     isPrivate: Optional[bool] = Field(
         default=True,
         description="Whether the resource is private to team members with appropriate authorisation.",
@@ -65,25 +57,17 @@ class MetadataBaseCreate(MetadataBaseSchema):
 
 
 class MetadataBaseUpdate(MetadataBaseSchema):
-    identifier: UUID = Field(
-        ..., description="Automatically generated unique identity for the resource."
-    )
+    identifier: UUID = Field(..., description="Automatically generated unique identity for the resource.")
 
 
 class MetadataBaseInDBBase(MetadataBaseSchema):
     # Identifier managed programmatically
-    identifier: UUID = Field(
-        ..., description="Automatically generated unique identity for the resource."
-    )
-    created: date = Field(
-        ..., description="Automatically generated date resource was created."
-    )
-    isActive: bool = Field(
-        ..., description="Whether the resource is still actively maintained."
-    )
-    isPrivate: bool = Field(
+    identifier: UUID = Field(..., description="Automatically generated unique identity for the resource.")
+    created: date = Field(..., description="Automatically generated date resource was created.")
+    isActive: bool = Field(..., description="Whether the resource is still actively maintained.")  # type: ignore
+    isPrivate: bool = Field(  # type: ignore
         ...,
-        description="Whether the resource is private to team members with appropriate authorisation.",
+        description="Whether the resource is private to with authorisation.",
     )
 
     class Config:

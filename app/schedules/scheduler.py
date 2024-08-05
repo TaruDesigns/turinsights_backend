@@ -1,128 +1,93 @@
 import asyncio
 import datetime
-import logging
+from typing import Callable
 
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore as JobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler as Scheduler
 from celery.result import AsyncResult
+from loguru import logger
+from pydantic import BaseModel, validator
 
-from app.api.deps import DBContext, get_db
-from app.core.celery_app import celery_app
+import app.worker.uipath as uipathtasks
+from app.api.deps import DBContext
 from app.core.config import settings
-from app.crud import tracked_synctimes, uip_folder
-from app.worker.uipath import FetchUIPathToken
+from app.crud import uip_folder, uip_job
 
 jobstore = JobStore(url=settings.SQLALCHEMY_DATABASE_URI)
 scheduler = Scheduler(jobstores={"default": jobstore})
 
 
-def start_basic_schedules():
-    logging.info("Adding Basic Schedules...")
-    if not scheduler.get_job("main_uip_token_refresh"):
-        scheduler.add_job(
-            refresh_token, "interval", seconds=150, id="main_uip_token_refresh"
-        )
-    if not scheduler.get_job("main_folder_refresh"):
-        scheduler.add_job(
-            refresh_folders,
-            "interval",
-            seconds=30,
-            id="main_folder_refresh",
-        )
-    if not scheduler.get_job("main_sessions_refresh"):
-        scheduler.add_job(
-            refresh_sessions,
-            "interval",
-            seconds=30,
-            id="main_sessions_refresh",
-        )
-    if not scheduler.get_job("main_processesandqueues_refresh"):
-        scheduler.add_job(
-            refresh_processes_and_queues,
-            "interval",
-            seconds=30,
-            id="main_processesandqueues_refresh",
-        )
-    if not scheduler.get_job("main_queueitemevent_refresh"):
-        scheduler.add_job(
-            refresh_queueitemevents,
-            "interval",
-            seconds=10,
-            id="main_queueitemevent_refresh",
-        )
-    if not scheduler.get_job("main_queueitemnew_refresh"):
-        scheduler.add_job(
-            refresh_queueitemnew,
-            "interval",
-            seconds=20,
-            id="main_queueitemnew_refresh",
-        )
-    if not scheduler.get_job("main_jobstarted_refresh"):
-        scheduler.add_job(
-            refresh_jobstarted,
-            "interval",
-            seconds=15,
-            id="main_jobstarted_refresh",
-        )
-
-
 async def refresh_token() -> None:
-    token = FetchUIPathToken()
-    celerytoken = celery_app.send_task("app.worker.uipath.GetUIPathToken")
+    token = uipathtasks.FetchUIPathToken()
+    uipathtasks.GetUIPathToken.apply_async()
 
 
 async def refresh_folders() -> None:
     kwargs = {"fulldata": True, "upsert": True}
-    celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
+    uipathtasks.fetchfolders.apply_async(kwargs=kwargs)
 
 
 async def refresh_sessions() -> None:
     kwargs = {"fulldata": True, "filter": None}
-    celery_app.send_task("app.worker.uipath.fetchsessions", kwargs=kwargs)
+    uipathtasks.fetchsessions.apply_async(kwargs=kwargs)
 
 
 async def refresh_processes_and_queues() -> None:
     folderlist = get_folderlist()
     kwargs = {"fulldata": True, "folderlist": folderlist, "filter": None}
-    celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
-    celery_app.send_task("app.worker.uipath.fetchqueuedefinitions", kwargs=kwargs)
+    uipathtasks.fetchprocesses.apply_async(kwargs=kwargs)
+    uipathtasks.fetchqueuedefinitions.apply_async(kwargs=kwargs)
 
 
 async def refresh_queueitemevents() -> None:
-    # todo CHANGE THIS AND MAKE IT WORK WITH ASYNC
     folderlist = get_folderlist()
-    logging.info("Sending Queue Item Event Sync Request")
+    logger.info("Sending Queue Item Event Sync Request")
     kwargs = {
         "fulldata": True,
         "folderlist": folderlist,
         "filter": None,
         "synctimes": True,
     }
-    celery_app.send_task("app.worker.uipath.fetchqueueitemevents", kwargs=kwargs)
+    uipathtasks.fetchqueueitemevents.apply_async(kwargs=kwargs)
 
 
 async def refresh_queueitemnew() -> None:
     folderlist = get_folderlist()
-    logging.info("Sending Queue Item New Sync Request")
+    logger.info("Sending Queue Item New Sync Request")
     kwargs = {
         "fulldata": True,
         "folderlist": folderlist,
         "filter": None,
         "synctimes": True,
     }
-    celery_app.send_task("app.worker.uipath.fetchqueueitems", kwargs=kwargs)
+    uipathtasks.fetchqueueitems.apply_async(kwargs=kwargs)
 
 
 async def refresh_jobstarted() -> None:
     folderlist = get_folderlist()
-    logging.info("Sending Jobs Started Sync Request")
+    logger.info("Sending Jobs Started Sync Request")
     kwargs = {
         "fulldata": True,
         "folderlist": folderlist,
         "filter": None,
         "synctimes": True,
     }
-    celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
+    uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
+
+
+async def refresh_jobsunfinished() -> None:
+    folderlist = get_folderlist()
+    unfinished_ids = get_unfinishedjobs()
+    if unfinished_ids:
+        filter = f"Id in ({', '.join(str(x) for x in unfinished_ids)})"
+        logger.info("Sending Poll Jobs Unfinished Request")
+        kwargs = {
+            "fulldata": True,
+            "folderlist": folderlist,
+            "filter": filter,
+            "synctimes": False,
+        }
+        uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
 
 
 async def wait_for_result(result: AsyncResult, timeout: int = 30):
@@ -141,3 +106,54 @@ def get_folderlist() -> list:
         folderlist = uip_folder.get_multi(db=db)
         folderlist = [folder.Id for folder in folderlist]
     return folderlist
+
+
+def get_unfinishedjobs() -> list[int] | None:
+    # This one needs to be like this because it uses DBContext for APScheduler
+    with DBContext() as db:
+        jobids = uip_job.get_unfinished_jobid(db=db)
+    return jobids
+
+
+class Schedule(BaseModel):
+    seconds: int = 15
+    taskid: str
+    taskfunction: Callable
+
+    @validator("taskfunction")
+    def check_func(cls, v):
+        if not callable(v):
+            raise ValueError("taskfunction must be a callable")
+        return v
+
+
+# Main Schedules dict.
+schedules = {
+    "main_uip_token_refresh": Schedule(seconds=150, taskid="main_uip_token_refresh", taskfunction=refresh_token),
+    "main_folder_refresh": Schedule(seconds=300, taskid="main_folder_refresh", taskfunction=refresh_folders),
+    "main_sessions_refresh": Schedule(seconds=300, taskid="main_sessions_refresh", taskfunction=refresh_sessions),
+    "main_processesandqueues_refresh": Schedule(
+        seconds=300, taskid="main_processesandqueues_refresh", taskfunction=refresh_processes_and_queues
+    ),
+    "main_queueitemevent_refresh": Schedule(
+        seconds=150, taskid="main_queueitemevent_refresh", taskfunction=refresh_queueitemevents
+    ),
+    "main_jobstarted_refresh": Schedule(seconds=150, taskid="main_jobstarted_refresh", taskfunction=refresh_jobstarted),
+    "main_jobspolled_refresh": Schedule(
+        seconds=150, taskid="main_jobspolled_refresh", taskfunction=refresh_jobsunfinished
+    ),
+}
+
+
+def start_basic_schedules(schedules: dict[str, Schedule] = schedules):
+    """Starts the schedules indicated in the argument
+
+    Args:
+        schedules (dict[str, Schedule], optional): _description_. Defaults to schedules.
+    """
+    logger.info("Adding Main Schedules...")
+    for key, val in schedules.items():
+        if not scheduler.get_job(val.taskid):
+            logger.info(f"Adding task: {val.taskid}")
+            scheduler.add_job(val.taskfunction, "interval", seconds=val.seconds, id=val.taskid)
+    logger.info("Main schedules checked")

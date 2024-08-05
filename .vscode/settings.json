@@ -11,10 +11,14 @@
         "**/**email-templates**":true,
         "**/**core**":true,
         //"**/db":true,
+        "**/totp.py":true,
+        "**/token.py":true,
+        "**/msg.py":true,
+        "**/emails.py":true,
         "imports":true,
         ".flake8":true,
         ".python-version":true,
-        "alembic.ini":true,
+        //"alembic.ini":true,
         "mypy.ini":true,
         "poetry.lock":true,
         "pyproject.toml":true,
@@ -24,7 +28,7 @@
         //"**dockerfile**":true,
         "docker-compose.yml":true,
         ".dockerignore":true,
-        ".env.example":true
+        ".env.example":true,
     },
     "python.analysis.typeCheckingMode": "basic"
 }

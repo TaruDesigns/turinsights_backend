@@ -9,7 +9,7 @@ from app.db.base_class import Base
 
 class Folder(Base):
     # Folder = OrganizationUnit
-    __tablename__ = "uipath_folders"
+    __tablename__ = "uipath_folders"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     Key = mapped_column(UUID(as_uuid=True))
     DisplayName = mapped_column(String, index=True)
@@ -27,7 +27,7 @@ class Folder(Base):
 
 
 class QueueDefinitions(Base):
-    __tablename__ = "uipath_queuedefinitions"
+    __tablename__ = "uipath_queuedefinitions"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     Key = mapped_column(UUID(as_uuid=True))
     OrganizationUnitId = mapped_column(ForeignKey("uipath_folders.Id"))
@@ -59,7 +59,7 @@ class QueueDefinitions(Base):
 class TrackedQueue(Base):
     """Model for queue definitions(queue items) tracking strategies"""
 
-    __tablename__ = "tracked_queues"
+    __tablename__ = "tracked_queues"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     QueueId = mapped_column(ForeignKey("uipath_queuedefinitions.Id"))
     Strategy = mapped_column(String)
@@ -71,10 +71,8 @@ class TrackedQueue(Base):
 
 
 class Process(Base):
-    __tablename__ = "uipath_processes"
-    Key = mapped_column(
-        UUID, primary_key=True, index=True
-    )  # For starting job and whatnot, we use the Key
+    __tablename__ = "uipath_processes"  # type: ignore
+    Key = mapped_column(UUID, primary_key=True, index=True)  # For starting job and whatnot, we use the Key
     Id = mapped_column(Integer)
     OrganizationUnitId = mapped_column(ForeignKey("uipath_folders.Id"))
     Name = mapped_column(String)
@@ -90,7 +88,7 @@ class Process(Base):
 class TrackedProcess(Base):
     """Model for process(jobs) tracking strategies"""
 
-    __tablename__ = "tracked_processes"
+    __tablename__ = "tracked_processes"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     ProcessKey = mapped_column(ForeignKey("uipath_processes.Key"))
     Strategy = mapped_column(String)
@@ -102,7 +100,7 @@ class TrackedProcess(Base):
 
 
 class QueueItem(Base):
-    __tablename__ = "uipath_queueitems"
+    __tablename__ = "uipath_queueitems"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     QueueDefinitionId = mapped_column(ForeignKey("uipath_queuedefinitions.Id"))
     ReviewerUserId = mapped_column(Integer)
@@ -136,7 +134,7 @@ class QueueItem(Base):
 
 
 class QueueItemEvent(Base):
-    __tablename__ = "uipath_queueitemevents"
+    __tablename__ = "uipath_queueitemevents"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     QueueItemId = mapped_column(ForeignKey("uipath_queueitems.Id"))
     UserId = mapped_column(Integer)
@@ -154,7 +152,7 @@ class QueueItemEvent(Base):
 
 
 class Job(Base):
-    __tablename__ = "uipath_jobs"
+    __tablename__ = "uipath_jobs"  # type: ignore
     Id = mapped_column(Integer, primary_key=True, index=True)
     Key = mapped_column(UUID)
     StartingScheduleId = mapped_column(Integer)
@@ -184,7 +182,7 @@ class Job(Base):
 
 
 class Sessions(Base):
-    __tablename__ = "uipath_sessions"
+    __tablename__ = "uipath_sessions"  # type: ignore
     SessionId = mapped_column(Integer, primary_key=True, index=True)
     MachineId = mapped_column(Integer)  # TODO Relationship and expand
     MachineName = mapped_column(String)

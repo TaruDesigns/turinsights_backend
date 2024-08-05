@@ -33,7 +33,7 @@ async def proxy_post_request(
             "Authorization": request.headers.get("Authorization"),
         }
         async with httpx.AsyncClient() as client:
-            proxy = await client.post(f"{path}", headers=headers, data=data)
+            proxy = await client.post(f"{path}", headers=headers, data=data)  # type: ignore
         response = Response(content=proxy.content, status_code=proxy.status_code)
         return response
     except Exception as e:
@@ -49,9 +49,7 @@ async def proxy_get_request(
 ) -> Any:
     try:
         headers = {
-            "Content-Type": request.headers.get(
-                "Content-Type", "application/x-www-form-urlencoded"
-            ),
+            "Content-Type": request.headers.get("Content-Type", "application/x-www-form-urlencoded"),
             "Authorization": request.headers.get("Authorization"),
         }
         async with httpx.AsyncClient() as client:

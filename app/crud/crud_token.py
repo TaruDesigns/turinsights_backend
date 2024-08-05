@@ -40,17 +40,10 @@ class CRUDToken(CRUDBase[Token, RefreshTokenCreate, RefreshTokenUpdate]):
         return db_obj
 
     def get(self, *, user: User, token: str) -> Token:
-        return user.refresh_tokens.filter(
-            and_(self.model.token == token, self.model.is_valid == True)
-        ).first()
+        return user.refresh_tokens.filter(and_(self.model.token == token, self.model.is_valid == True)).first()  # type: ignore
 
     def get_multi(self, *, user: User, skip: int = 0, limit: int = 100) -> List[Token]:
-        return (
-            user.refresh_tokens.filter(self.model.is_valid == True)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+        return user.refresh_tokens.filter(self.model.is_valid == True).offset(skip).limit(limit).all()  # type: ignore
 
 
 token = CRUDToken(Token)

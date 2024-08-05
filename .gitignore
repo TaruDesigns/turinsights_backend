@@ -32,3 +32,4 @@ CURLGeneratePyCode
 HOW TO DEBUG THIS
 notes.txt
 .env
+debug.py

@@ -20,14 +20,14 @@ class UserBase(BaseModel):
 
 # Properties to receive via API on creation
 class UserCreate(UserBase):
-    email: EmailStr
-    password: Optional[constr(min_length=8, max_length=64)] = None
+    email: EmailStr  # type: ignore
+    password: Optional[constr(min_length=8, max_length=64)] = None  # type: ignore
 
 
 # Properties to receive via API on update
 class UserUpdate(UserBase):
-    original: Optional[constr(min_length=8, max_length=64)] = None
-    password: Optional[constr(min_length=8, max_length=64)] = None
+    original: Optional[constr(min_length=8, max_length=64)] = None  # type: ignore
+    password: Optional[constr(min_length=8, max_length=64)] = None  # type: ignore
 
 
 class UserInDBBase(UserBase):
