@@ -25,4 +25,4 @@ class TrackedQueue(BaseModel):
 class SyncTimes(BaseModel):
     id: int
     TimeStamp: datetime.datetime
-    Description: Optional[str]
+    Description: Optional[str] = None

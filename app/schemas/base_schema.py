@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 from app.schema_types import BaseEnum
 
@@ -69,8 +69,4 @@ class MetadataBaseInDBBase(MetadataBaseSchema):
         ...,
         description="Whether the resource is private to with authorisation.",
     )
-
-    class Config:
-        # https://github.com/samuelcolvin/pydantic/issues/1334#issuecomment-745434257
-        # Call PydanticModel.from_orm(dbQuery)
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
