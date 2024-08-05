@@ -18,4 +18,4 @@ class UIPFetchPostBody(BaseModel):
     upsert: bool = True
     fulldata: bool = False
     filter: Optional[str] = None
-    folderlist: Optional[List[int]]
+    folderlist: Optional[List[int]] = None

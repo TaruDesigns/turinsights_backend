@@ -3,7 +3,8 @@ import secrets
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from pydantic import AnyHttpUrl, BaseSettings, EmailStr, HttpUrl, PostgresDsn, validator
+from pydantic import AnyHttpUrl, EmailStr, HttpUrl, PostgresDsn, ValidationInfo, field_validator
+from pydantic_settings import BaseSettings
 
 if os.environ.get("PROJECT_NAME") is None:
     load_dotenv()  # Sanity dotenv reload just in case it wasn't loaded on import, useful for debugging
@@ -28,7 +29,8 @@ class Settings(BaseSettings):
     DEBUG_MODE: bool = False
     WAIT_FOR_ATTACH: bool = False
 
-    @validator("BACKEND_CORS_ORIGINS", pre=True)
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
@@ -39,7 +41,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str
     SENTRY_DSN: Optional[HttpUrl] = None
 
-    @validator("SENTRY_DSN", pre=True)
+    @field_validator("SENTRY_DSN", mode="before")
+    @classmethod
     def sentry_dsn_can_be_blank(cls, v: str) -> Optional[str]:
         if len(v) == 0:
             return None
@@ -49,19 +52,22 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
     POSTGRES_DB: str
-    SQLALCHEMY_DATABASE_URI: Optional[PostgresDsn] = None
+    SQLALCHEMY_DATABASE_URI: Optional[str] = None
 
-    @validator("SQLALCHEMY_DATABASE_URI", pre=True)
-    def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
+    # TODO[pydantic]: We couldn't refactor the `validator`, please replace it by `field_validator` manually.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-validators for more information.
+    @field_validator("SQLALCHEMY_DATABASE_URI", mode="before")  # type: ignore
+    @classmethod
+    def assemble_db_connection(cls, v: Optional[str], info: ValidationInfo) -> Any:
         if isinstance(v, str):
             return v
         return PostgresDsn.build(
             scheme="postgresql",
-            user=values.get("POSTGRES_USER"),
-            password=values.get("POSTGRES_PASSWORD"),
-            host=values.get("POSTGRES_SERVER"),
-            path=f"/{values.get('POSTGRES_DB') or ''}",
-        )
+            username=info.data.get("POSTGRES_USER"),
+            password=info.data.get("POSTGRES_PASSWORD"),
+            host=info.data.get("POSTGRES_SERVER"),
+            path=f"{info.data.get('POSTGRES_DB') or ''}",
+        ).unicode_string()
 
     SMTP_TLS: bool = True
     SMTP_PORT: Optional[int] = None
@@ -72,7 +78,9 @@ class Settings(BaseSettings):
     EMAILS_FROM_NAME: Optional[str] = None
     EMAILS_TO_EMAIL: Optional[EmailStr] = None
 
-    @validator("EMAILS_FROM_NAME")
+    # TODO[pydantic]: We couldn't refactor the `validator`, please replace it by `field_validator` manually.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-validators for more information.
+    @field_validator("EMAILS_FROM_NAME")  # type: ignore
     def get_project_name(cls, v: Optional[str], values: Dict[str, Any]) -> str:
         if not v:
             return values["PROJECT_NAME"]
@@ -82,12 +90,12 @@ class Settings(BaseSettings):
     EMAIL_TEMPLATES_DIR: str = "/app/app/email-templates/build"
     EMAILS_ENABLED: bool = False
 
-    @validator("EMAILS_ENABLED", pre=True)
-    def get_emails_enabled(cls, v: bool, values: Dict[str, Any]) -> bool:
+    # TODO[pydantic]: We couldn't refactor the `validator`, please replace it by `field_validator` manually.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-validators for more information.
+    @field_validator("EMAILS_ENABLED", mode="before")  # type: ignore
+    def get_emails_enabled(cls, v: bool, values: ValidationInfo) -> bool:
         return bool(
-            values.get("SMTP_HOST")
-            and values.get("SMTP_PORT")
-            and values.get("EMAILS_FROM_EMAIL")
+            values.data.get("SMTP_HOST") and values.data.get("SMTP_PORT") and values.data.get("EMAILS_FROM_EMAIL")
         )
 
     EMAIL_TEST_USER: EmailStr = "test@example.com"  # type: ignore
@@ -106,4 +114,4 @@ class Settings(BaseSettings):
     BROKER_CONNECTION_STRING: str = "amqp://guest@queue//"
 
 
-settings = Settings()
+settings = Settings()  # type: ignore it's filled in runtime with envs

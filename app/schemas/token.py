@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 
 class RefreshTokenBase(BaseModel):
@@ -19,8 +19,7 @@ class RefreshTokenUpdate(RefreshTokenBase):
 
 
 class RefreshToken(RefreshTokenUpdate):
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):

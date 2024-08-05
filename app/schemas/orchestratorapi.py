@@ -1,9 +1,9 @@
 import json
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import UUID4, BaseModel
+from pydantic import UUID4, BaseModel, ConfigDict
 
 # Schemas for UIpath API Calls
 
@@ -25,30 +25,28 @@ class BaseApiModel(BaseModel):
         return cls(**mapped_values)
 
     def __init__(self, **data):
-        for field_name, field in self.__fields__.items():
-            if field.type_ is datetime and field_name in data and data[field_name] is not None:
+        for field_name, field in self.model_fields.items():
+            if field.annotation is datetime and field_name in data and data[field_name] is not None:
                 from datetime import timezone
 
                 # This is to forze UTC timezones and avoid issues with dateutil.parse trying to assign timezonelocal
                 data[field_name] = data[field_name].astimezone(timezone.utc)
         super().__init__(**data)
 
-    class Config:
-        allow_population_by_field_name = False
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(populate_by_name=False, arbitrary_types_allowed=True)
 
     @classmethod
     def get_select_filter(self):
-        return ", ".join(self.__fields__.keys())
+        return ", ".join(self.model_fields.keys())
 
 
 # ----------------------------------------
 class ProcessingException(BaseApiModel):
-    Reason: Optional[str]
-    Details: Optional[str]
-    Type: Optional[str]
-    AssociatedImageFilePath: Optional[str]
-    CreationTime: Optional[datetime]
+    Reason: Optional[str] = None
+    Details: Optional[str] = None
+    Type: Optional[str] = None
+    AssociatedImageFilePath: Optional[str] = None
+    CreationTime: Optional[datetime] = None
 
 
 # ----------------------------------------
@@ -64,10 +62,10 @@ class FolderBase(BaseApiModel):
     Key: UUID4
     DisplayName: str
     FullyQualifiedName: str
-    Description: Optional[str]
+    Description: Optional[str] = None
     FolderType: str
-    ParentId: Optional[int]
-    ParentKey: Optional[UUID4]
+    ParentId: Optional[int] = None
+    ParentKey: Optional[UUID4] = None
     Id: int
 
 
@@ -91,22 +89,22 @@ class FolderGETResponse(FolderBase):
 class QueueItemBase(BaseApiModel):
     QueueDefinitionId: int
     Status: str
-    ReviewStatus: Optional[str]
+    ReviewStatus: Optional[str] = None
     Key: UUID4
-    Reference: Optional[str]
-    ProcessingExceptionType: Optional[str]
-    DueDate: Optional[datetime]
-    RiskSlaDate: Optional[datetime]
+    Reference: Optional[str] = None
+    ProcessingExceptionType: Optional[str] = None
+    DueDate: Optional[datetime] = None
+    RiskSlaDate: Optional[datetime] = None
     Priority: str
-    DeferDate: Optional[datetime]
-    StartProcessing: Optional[datetime]
-    EndProcessing: Optional[datetime]
+    DeferDate: Optional[datetime] = None
+    StartProcessing: Optional[datetime] = None
+    EndProcessing: Optional[datetime] = None
     RetryNumber: int
     CreationTime: datetime
-    Progress: Optional[str]
+    Progress: Optional[str] = None
     OrganizationUnitId: int
     Id: int
-    ProcessingException: Optional[ProcessingException]
+    ProcessingException: Optional[ProcessingException] = None
 
 
 class QueueItemGETResponse(QueueItemBase):
@@ -118,12 +116,12 @@ class QueueItemCreate(QueueItemGETResponse):
 
 
 class QueueItemGETResponseExtended(QueueItemBase):
-    ReviewerUserId: Optional[int]
-    SecondsInPreviousAttempts: Optional[int]
-    AncestorId: Optional[int]
-    SpecificContent: Optional[Dict]
-    Output: Optional[Dict]
-    Analytics: Optional[Dict]
+    ReviewerUserId: Optional[int] = None
+    SecondsInPreviousAttempts: Optional[int] = None
+    AncestorId: Optional[int] = None
+    SpecificContent: Optional[Dict] = None
+    Output: Optional[Dict] = None
+    Analytics: Optional[Dict] = None
 
 
 class QueueItemUpdate(QueueItemGETResponseExtended):
@@ -146,13 +144,13 @@ class QueueItemEventGETResponse(QueueItemEventBase):
 
 
 class QueueItemEventGETResponseExtended(QueueItemEventGETResponse):
-    Data: Optional[str]
-    UserId: Optional[int]
-    UserName: Optional[str]
-    ReviewStatus: Optional[str]
-    ReviewerUserId: Optional[int]
-    ReviewerUserName: Optional[str]
-    ExternalClientId: Optional[int]
+    Data: Optional[str] = None
+    UserId: Optional[int] = None
+    UserName: Optional[str] = None
+    ReviewStatus: Optional[str] = None
+    ReviewerUserId: Optional[int] = None
+    ReviewerUserName: Optional[str] = None
+    ExternalClientId: Optional[int] = None
 
 
 class QueueItemEventCreate(QueueItemEventGETResponseExtended):
@@ -169,7 +167,7 @@ class QueueItemEventCreate(QueueItemEventGETResponseExtended):
 class ProcessBase(BaseApiModel):
     Key: UUID4
     Name: str
-    OrganizationUnitId: str
+    OrganizationUnitId: int
     Id: int
     ProcessKey: str
     ProcessVersion: str
@@ -181,7 +179,7 @@ class ProcessGETResponse(ProcessBase):
 
 class ProcessGETResponseExtended(ProcessGETResponse):
     JobPriority: str
-    Arguments: Optional[Dict]
+    Arguments: Optional[Dict] = None
 
 
 class ProcessCreate(ProcessGETResponse):
@@ -197,8 +195,8 @@ class ProcessUpdate(ProcessGETResponseExtended):
 # ----------------------------------------
 class JobBase(BaseApiModel):
     Key: UUID4
-    EndTime: Optional[datetime]
-    StartTime: Optional[datetime]
+    EndTime: Optional[datetime] = None
+    StartTime: Optional[datetime] = None
     ReleaseName: str
     CreationTime: datetime
     State: str
@@ -214,18 +212,18 @@ class JobGETResponseExtended(JobGETResponse):
     JobPriority: str
     Source: str
     SourceType: str
-    Info: Optional[str]
-    StartingScheduleId: Optional[int]
-    InputArguments: Optional[Dict]
-    OutputArguments: Optional[Dict]
-    HostMachineName: Optional[str]
-    PersistenceId: Optional[UUID4]
-    StopStrategy: Optional[str]
+    Info: Optional[str] = None
+    StartingScheduleId: Optional[int] = None
+    InputArguments: Optional[Dict] = None
+    OutputArguments: Optional[Dict] = None
+    HostMachineName: Optional[str] = None
+    PersistenceId: Optional[UUID4] = None
+    StopStrategy: Optional[str] = None
     OrganizationUnitId: int
-    Reference: Optional[str]
-    LocalSystemAccount: Optional[str]
-    OrchestratorUserIdentity: Optional[str]
-    MaxExpectedRunningTimeSeconds: Optional[int]
+    Reference: Optional[str] = None
+    LocalSystemAccount: Optional[str] = None
+    OrchestratorUserIdentity: Optional[str] = None
+    MaxExpectedRunningTimeSeconds: Optional[int] = None
 
     @classmethod
     def parse_from_swagger(cls, res_values: Dict[str, Any], attribute_map: Dict[str, str]) -> "Any":
@@ -278,8 +276,8 @@ class StopStrategies(str, Enum):
 
 
 class MachineRobotDto(BaseApiModel):
-    MachineId: Optional[int]
-    RobotId: Optional[int]
+    MachineId: Optional[int] = None
+    RobotId: Optional[int] = None
 
 
 class JobPOSTStartBodyBase(BaseApiModel):
@@ -289,7 +287,7 @@ class JobPOSTStartBodyBase(BaseApiModel):
     Source: str = JobSources.IntegrationTrigger  # Default
     SpecificPriorityValue: int = 50
     RuntimeType: str = JobRuntimeTypes.Unattended
-    InputArguments: Optional[Dict]
+    InputArguments: Optional[Dict] = None
 
 
 class JobPOSTStartBodyJobCount(JobPOSTStartBodyBase):
@@ -299,7 +297,7 @@ class JobPOSTStartBodyJobCount(JobPOSTStartBodyBase):
 
 class JobPOSTStartBodySpecific(JobPOSTStartBodyBase):
     Strategy: str = JobStrategies.Specific
-    MachineRobots = List[MachineRobotDto]
+    MachineRobots: List[MachineRobotDto]
 
 
 class JobPOSTStopBodyBase(BaseApiModel):
@@ -324,20 +322,20 @@ class QueueDefinitionGETResponse(QueueDefinitionBase):
 
 class QueueDefinitionGETResponseExtended(QueueDefinitionGETResponse):
     CreationTime: datetime
-    Description: Optional[str]
-    AcceptAutomaticallyRetry: Optional[bool]
-    EnforceUniqueReference: Optional[bool]
-    Encrypted: Optional[bool]
-    SpecificDataJsonSchema: Optional[str]
-    OutputDataJsonSchema: Optional[str]
-    AnalyticsDataJsonSchema: Optional[str]
-    ProcessScheduleId: Optional[int]
-    SlaInMinutes: Optional[int]
-    RiskSlaInMinutes: Optional[int]
-    ReleaseId: Optional[int]
-    IsProcessInCurrentFolder: Optional[bool]
-    FoldersCount: Optional[int]
-    Tags: Optional[Dict]
+    Description: Optional[str] = None
+    AcceptAutomaticallyRetry: Optional[bool] = None
+    EnforceUniqueReference: Optional[bool] = None
+    Encrypted: Optional[bool] = None
+    SpecificDataJsonSchema: Optional[str] = None
+    OutputDataJsonSchema: Optional[str] = None
+    AnalyticsDataJsonSchema: Optional[str] = None
+    ProcessScheduleId: Optional[int] = None
+    SlaInMinutes: Optional[int] = None
+    RiskSlaInMinutes: Optional[int] = None
+    ReleaseId: Optional[int] = None
+    IsProcessInCurrentFolder: Optional[bool] = None
+    FoldersCount: Optional[int] = None
+    Tags: Union[Optional[Dict], Optional[List[str]]] = None
 
 
 class QueueDefinitionCreate(QueueDefinitionGETResponse):

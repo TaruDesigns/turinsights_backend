@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import UUID4, BaseModel
+from pydantic import ConfigDict, UUID4, BaseModel
 
 
 class BaseApiModel(BaseModel):
@@ -19,10 +19,7 @@ class BaseApiModel(BaseModel):
             mapped_key = attribute_map.get(key, key)
             mapped_values[mapped_key] = value
         return cls(**mapped_values)
-
-    class Config:
-        allow_population_by_field_name = False
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(populate_by_name=False, arbitrary_types_allowed=True)
 
     @classmethod
     def get_select_filter(self):
@@ -39,7 +36,7 @@ class CommonProperties(BaseApiModel):
     Timestamp: datetime
     TenantId: int
     UserId: int
-    OrganizationUnitId: Optional[int]
+    OrganizationUnitId: Optional[int] = None
 
 
 # -- Job related properties ---
@@ -53,7 +50,7 @@ class ReleaseInfo(BaseApiModel):
     Id: int
     Key: UUID4
     ProcessKey: str
-    Name: Optional[str]
+    Name: Optional[str] = None
 
 
 class JobInfo(BaseApiModel):
@@ -61,11 +58,11 @@ class JobInfo(BaseApiModel):
     Key: UUID4
     State: str
     StartTime: str
-    EndTime: Optional[str]
-    Info: Optional[str]
-    OutputArguments: Optional[dict]
-    Robot: Optional[RobotInfo]
-    Release: Optional[ReleaseInfo]
+    EndTime: Optional[str] = None
+    Info: Optional[str] = None
+    OutputArguments: Optional[dict] = None
+    Robot: Optional[RobotInfo] = None
+    Release: Optional[ReleaseInfo] = None
 
 
 class JobPayload(CommonProperties):
@@ -96,16 +93,16 @@ class QueueItemInfo(BaseModel):
     QueueDefinitionId: int
     Status: str
     ReviewStatus: str
-    ProcessingException: Optional[ProcessingExceptionInfo]
+    ProcessingException: Optional[ProcessingExceptionInfo] = None
     Priority: str
     CreationTime: str
     StartProcessing: str
-    EndProcessing: Optional[str]
+    EndProcessing: Optional[str] = None
     SecondsInPreviousAttempts: int
     RetryNumber: int
     Robot: RobotInfo
     SpecificContent: dict
-    Output: Optional[dict]
+    Output: Optional[dict] = None
 
 
 class QueueItemPayload(CommonProperties):

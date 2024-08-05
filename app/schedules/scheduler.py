@@ -6,7 +6,7 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore as JobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler as Scheduler
 from celery.result import AsyncResult
 from loguru import logger
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 
 import app.worker.uipath as uipathtasks
 from app.api.deps import DBContext
@@ -120,7 +120,8 @@ class Schedule(BaseModel):
     taskid: str
     taskfunction: Callable
 
-    @validator("taskfunction")
+    @field_validator("taskfunction")
+    @classmethod
     def check_func(cls, v):
         if not callable(v):
             raise ValueError("taskfunction must be a callable")
