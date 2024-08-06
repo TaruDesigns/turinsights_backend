@@ -1,6 +1,6 @@
 from typing import Any, Optional, Tuple
 
-from odata_query.sqlalchemy import apply_odata_query
+from odata_query.sqlalchemy.shorthand import apply_odata_query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

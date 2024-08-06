@@ -30,7 +30,6 @@ def init() -> None:
 
 def main() -> None:
     logger.info("Initializing service")
-    NeomodelConfig().ready()
     init()
     logger.info("Service finished initializing")
 
