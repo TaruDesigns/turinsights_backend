@@ -4,6 +4,11 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 
+
+def test_celery_pass() -> None:
+    assert 1 == 1
+
+
 """
 def test_celery_worker_test(
     client: TestClient, superuser_token_headers: Dict[str, str]

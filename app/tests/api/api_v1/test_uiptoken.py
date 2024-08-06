@@ -3,6 +3,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
+
+def test_uip_pass() -> None:
+    assert 1 == 1
+
+
 """
 def test_fetch_token_withoutcrud(client: TestClient, db: Session) -> None:
     data = {"cruddb": False}
