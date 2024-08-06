@@ -6,7 +6,7 @@ from app.core.security import verify_password
 from app.schemas.user import UserCreate, UserUpdate
 from app.tests.utils.utils import random_email, random_lower_string
 
-"""
+
 def test_create_user(db: Session) -> None:
     email = random_email()
     password = random_lower_string()
@@ -92,4 +92,3 @@ def test_update_user(db: Session) -> None:
     assert user_2
     assert user.email == user_2.email
     assert verify_password(new_password, user_2.hashed_password)
-"""

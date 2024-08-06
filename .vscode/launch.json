@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        
         {
             "name": "Python: Current File",
             "type": "python",
@@ -12,6 +13,21 @@
             "console": "integratedTerminal",
             "justMyCode": true
         },
+                {
+                    "name": "Python: Debug pytest",
+                    "type": "python",
+                    "request": "launch",
+                    "program": "${workspaceFolder}/app/tests",  // Adjust to your tests directory
+                    "args": [
+                        "--cov=app",
+                        "--cov-report=term-missing",
+                        "--html=report.html",
+                        "--self-contained-html"
+                    ],
+                    "console": "integratedTerminal",
+                    "justMyCode": false,
+                    "envFile": "${workspaceFolder}/.env"
+                }
 
         {
             "name": "Python: Debugfile",

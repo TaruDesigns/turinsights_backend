@@ -33,3 +33,5 @@ HOW TO DEBUG THIS
 notes.txt
 .env
 debug.py
+
+app/tests/results/**

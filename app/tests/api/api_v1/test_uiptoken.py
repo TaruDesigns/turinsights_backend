@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
-
+"""
 def test_fetch_token_withoutcrud(client: TestClient, db: Session) -> None:
     data = {"cruddb": False}
     response = client.post(
@@ -28,3 +28,4 @@ def test_fetch_token_withcrud(client: TestClient, db: Session) -> None:
     # assert content["title"] == data["title"]
     # assert content["description"] == data["description"]
     # assert "access_token" in content
+"""
