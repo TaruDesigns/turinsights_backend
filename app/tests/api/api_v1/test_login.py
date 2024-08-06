@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import settings
 
-"""
+
 def test_get_access_token(client: TestClient) -> None:
     login_data = {
         "username": settings.FIRST_SUPERUSER,
@@ -25,4 +25,3 @@ def test_use_access_token(client: TestClient, superuser_token_headers: Dict[str,
     result = r.json()
     assert r.status_code == 200
     assert "email" in result
-"""

@@ -10,7 +10,7 @@
         "**/**schema_types**":true,
         "**/**email-templates**":true,
         "**/**core**":true,
-        //"**/db":true,
+        "**/db":true,
         "**/totp.py":true,
         "**/token.py":true,
         "**/msg.py":true,
@@ -29,6 +29,7 @@
         "docker-compose.yml":true,
         ".dockerignore":true,
         ".env.example":true,
+        "**/utilities**": true,
     },
-    "python.analysis.typeCheckingMode": "basic"
+    "python.analysis.typeCheckingMode": "basic",
 }
