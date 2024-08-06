@@ -3,7 +3,7 @@ from enum import IntEnum, unique
 from typing import Any, Optional
 
 from loguru import logger
-from odata_query.sqlalchemy import apply_odata_query
+from odata_query.sqlalchemy.shorthand import apply_odata_query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,9 +16,9 @@ from app.crud.base import CRUDBase
 # This is basically an internal config enum.
 @unique
 class TrackingKeys(IntEnum):
-    QueueItemEvents: int = 1
-    JobsStarted: int = 2
-    QueueItemsNew: int = 3
+    QueueItemEvents = 1
+    JobsStarted = 2
+    QueueItemsNew = 3
 
 
 # TrackingKeys = {"QueueItemEvents": 1, "JobsStarted": 2, "QueueItemsNew": 3}
@@ -36,7 +36,7 @@ class CRUDTrackedProcess(
 
     def get_odata(self, db: Session, filter: str) -> Optional[trackschemas.TrackedProcess]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type:ignore
 
 
 class CRUDTrackedQueue(CRUDBase[uipmodels.TrackedQueue, trackschemas.TrackedQueue, trackschemas.TrackedQueue]):
@@ -45,7 +45,7 @@ class CRUDTrackedQueue(CRUDBase[uipmodels.TrackedQueue, trackschemas.TrackedQueu
 
     def get_odata(self, db: Session, filter: str) -> Optional[trackschemas.TrackedQueue]:
         query = apply_odata_query(select(self.model), filter)
-        return db.execute(query).scalars().all()
+        return db.execute(query).scalars().all()  # type:ignore
 
 
 class CRUDSyncTimes(
