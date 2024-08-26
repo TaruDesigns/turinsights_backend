@@ -6,6 +6,7 @@ from uipath_orchestrator_rest.rest import ApiException
 
 import app.worker.uipath as uipathtasks
 from app import crud, schemas
+from app.worker.uipath import get_db
 
 router = APIRouter()
 
@@ -43,7 +44,7 @@ def fetchfolders(
 def validate_or_folderlist(formdata: schemas.UIPFetchPostBody) -> list[int]:
     # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
     if not formdata.folderlist or formdata.folderlist == [0]:
-        with app.worker.uipath.get_db() as db:
+        with get_db() as db:
             folderlist = crud.uip_folder.get_multi(db=db, skip=0, limit=100)
             formdata.folderlist = [fol.Id for fol in folderlist]
     return formdata.folderlist

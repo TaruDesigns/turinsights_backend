@@ -41,7 +41,7 @@ class BaseApiModel(BaseModel):
 
 
 # ----------------------------------------
-class ProcessingException(BaseApiModel):
+class ProcessingExceptionSchema(BaseApiModel):
     Reason: Optional[str] = None
     Details: Optional[str] = None
     Type: Optional[str] = None
@@ -104,7 +104,7 @@ class QueueItemBase(BaseApiModel):
     Progress: Optional[str] = None
     OrganizationUnitId: int
     Id: int
-    ProcessingException: Optional[ProcessingException] = None
+    ProcessingException: Optional[ProcessingExceptionSchema] = None
 
 
 class QueueItemGETResponse(QueueItemBase):

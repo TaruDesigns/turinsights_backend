@@ -14,11 +14,13 @@ if __name__ == "__main__":
     from app.crud import uip_job
     from app.db.session import get_db
     from app.main import app
+    from app.worker import FetchUIPathToken, fetchqueueitemevents, fetchqueueitems
+
+    FetchUIPathToken()
+    fetchqueueitems(folderlist=[4572437])
 
     # from app.schedules.scheduler import refresh_jobsunfinished
     # asyncio.run(refresh_jobsunfinished())
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
-    # from app.worker import FetchUIPathToken, fetchqueueitemevents
-    # FetchUIPathToken()
+    # uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
     # fetchqueueitemevents(synctimes=True)

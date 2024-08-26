@@ -16,7 +16,7 @@ from .orchestratorapi import (
     ProcessCreate,
     ProcessGETResponse,
     ProcessGETResponseExtended,
-    ProcessingException,
+    ProcessingExceptionSchema,
     ProcessUpdate,
     QueueDefinitionBase,
     QueueDefinitionCreate,
