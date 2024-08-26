@@ -1,3 +1,10 @@
 # Get rid of .venv when copying
-*/.venv
-*/*/.venv
+.venv
+.venv/**
+.vscode
+.vscode/**
+.pytest_cache
+.git
+.git/**
+.git/**/*
+.venv/**/*

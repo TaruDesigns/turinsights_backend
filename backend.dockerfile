@@ -31,8 +31,8 @@ ARG BACKEND_PRE_START_PATH=/app/prestart.sh
 ARG BACKEND_PROCESS_MANAGER=gunicorn
 ARG BACKEND_WITH_RELOAD=false
 ENV APP_MODULE=${BACKEND_APP_MODULE} PRE_START_PATH=${BACKEND_PRE_START_PATH} PROCESS_MANAGER=${BACKEND_PROCESS_MANAGER} WITH_RELOAD=${BACKEND_WITH_RELOAD}
-COPY ./app/ /app/
-COPY ./scripts/test.sh /app/
-COPY ./alembic /app/
+COPY ./ /app/
+#COPY ./scripts/test.sh /app/
+#COPY ./alembic /app/
 # This is to make sure migrations can be run inside the container
 COPY alembic.ini /app/
