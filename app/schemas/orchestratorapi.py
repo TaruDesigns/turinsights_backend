@@ -87,6 +87,26 @@ class FolderGETResponse(FolderBase):
 # ------QUEUE ITEM MODELS---------------
 # ----------------------------------------
 class QueueItemBase(BaseApiModel):
+    @classmethod
+    def parse_from_swagger(
+        cls, res_values: Dict[str, Any], attribute_map: Dict[str, str], exception_attribute_map: Dict[str, str]
+    ) -> "Any":
+        # Needs to override the regular function because it has embedded ProcessingException type
+        mapped_values = {}
+        for key, value in res_values.items():
+            mapped_key = attribute_map.get(key, key)
+            # Queue Item has a PRocessingException that needs to be treated differently
+            if mapped_key == "ProcessingException" and value is not None:
+                # Handle nested ProcessingExceptionSchema mapping
+                process_excep_values = {
+                    exception_attribute_map.get(nested_key, nested_key): nested_value
+                    for nested_key, nested_value in value.items()
+                }
+                mapped_values[mapped_key] = ProcessingExceptionSchema(**process_excep_values)
+            else:
+                mapped_values[mapped_key] = value
+        return cls(**mapped_values)
+
     QueueDefinitionId: int
     Status: str
     ReviewStatus: Optional[str] = None

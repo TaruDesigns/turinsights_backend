@@ -26,7 +26,7 @@
         "worker-start.sh":true,
         //"**scripts**":true,
         //"**dockerfile**":true,
-        "docker-compose.yml":true,
+        //"docker-compose.yml":true,
         ".dockerignore":true,
         ".env.example":true,
         "**/utilities**": true,

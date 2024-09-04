@@ -8,3 +8,15 @@
 .git/**
 .git/**/*
 .venv/**/*
+**/.venv
+**/.git
+**/.vscode
+.env
+.env.example
+.coverage
+notes.txt
+HOW TO DEBUG THIS
+debug.py
+.gitignore
+**/**.ipynb
+

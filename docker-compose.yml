@@ -1,6 +1,6 @@
 services:
   backend:
-    image: "${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}"
+    image: taruelec/turinsightsbackend:latest
     logging:
       driver: "json-file"
       options:
@@ -13,6 +13,7 @@ services:
       - SERVER_HOST=https://${DOMAIN?Variable not set}
       # Allow explicit env var override for tests
       - SMTP_HOST=${SMTP_HOST}
+      - MAX_WORKERS=1
     build:
       dockerfile: backend.dockerfile
       args:
@@ -28,7 +29,7 @@ services:
         - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=80
 
   celeryworker:
-    image: "${DOCKER_IMAGE_CELERYWORKER?Variable not set}:${TAG-latest}"
+    image: taruelec/turinsightsworker:latest
     logging:
       driver: "json-file"
       options:
