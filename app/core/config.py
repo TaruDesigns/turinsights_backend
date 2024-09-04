@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     UIP_SCOPE: str = "OR.Assets OR.Execution OR.BackgroundTasks OR.Folders OR.Jobs OR.Machines OR.Monitoring OR.Queues OR.Robots OR.Settings OR.Tasks OR.Users OR.Webhooks OR.TestDataQueues"
     UIP_GRANT_TYPE: str = "client_credentials"
     UIP_AUTH_TOKENURL: str = "https://cloud.uipath.com/identity_/connect/token"
+    UIP_API_URL: str
 
     BROKER_CONNECTION_STRING: str = "amqp://guest@queue//"
 

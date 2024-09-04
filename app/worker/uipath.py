@@ -67,6 +67,28 @@ def _APIResToList(response, objSchema):
     return [objSchema.parse_from_swagger(obj.to_dict(), obj.attribute_map) for obj in response.value]
 
 
+def _APIResToListQueueItem(response, objSchema):
+    """Helper function to make a list of pydantic models from API Response
+
+    Args:
+        response (_type_): API Client Response
+        objSchema (_type_): Pydantic Model
+
+    Returns:
+        list[objSchema]: List of items
+    """
+    res = []
+    for obj in response.value:
+        base_map = obj.attribute_map
+        if obj.processing_exception is not None:
+            excep_map = obj.processing_exception.attribute_map
+        else:
+            excep_map = None
+        parsed = objSchema.parse_from_swagger(obj.to_dict(), base_map, excep_map)
+        res.append(parsed)
+    return res
+
+
 def validate_or_default_folderlist(folderlist: list[int] | None) -> list[int]:
     # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
     if not folderlist or folderlist == [0]:
@@ -378,7 +400,7 @@ def fetchqueueitems(
                     filter=filter,
                     x_uipath_organization_unit_id=folder,
                 )
-                queueitems = _APIResToList(response=queueitems, objSchema=objSchema)
+                queueitems = _APIResToListQueueItem(response=queueitems, objSchema=objSchema)
                 results = results + queueitems
             except ApiException as e:
                 logger.error(f"Exception when calling QueueItemsAPI->queueItems_get:{e.body}")

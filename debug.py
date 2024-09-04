@@ -13,7 +13,6 @@ if __name__ == "__main__":
 
     from app.crud import uip_job
     from app.db.session import get_db
-    from app.main import app
     from app.worker import FetchUIPathToken, fetchqueueitemevents, fetchqueueitems
 
     FetchUIPathToken()
