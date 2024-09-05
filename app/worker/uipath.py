@@ -3,6 +3,9 @@ Note that the functions can also be used directly and they return the results fr
 
 # Standard Library Imports
 
+import asyncio
+import functools
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
@@ -31,6 +34,8 @@ from app.core.uipapiconfig import (
 )
 from app.crud.base import CRUDBase
 from app.db.session import get_db
+
+executor = ThreadPoolExecutor(max_workers=20)
 
 
 def _CRUDHelper(
@@ -418,6 +423,106 @@ def fetchqueueitems(
     return results
 
 
+async def fetch_queue_items_async(
+    upsert: bool = True,
+    fulldata: bool = True,
+    folderlist: list[int] | None = None,
+    filter: str | None = None,
+    synctimes: bool = False,
+) -> Any:
+    """Get QueueItems and save in DB (optional). Set formdata.cruddb to True"""
+
+    if fulldata:
+        objSchema = schemas.QueueItemGETResponseExtended
+    else:
+        objSchema = schemas.QueueItemGETResponse
+
+    folderlist = validate_or_default_folderlist(folderlist)
+    filter = filter if filter else "Id ne 0"
+    select = objSchema.get_select_filter()
+    logger.info("Refreshing Queue Items")
+
+    with get_db() as db:
+        _FolderChecker(db=db, folders=folderlist)
+
+        results = []
+        if synctimes:
+            lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
+            filter = f"StartProcessing gt {lastsynctime.isoformat()}Z" if lastsynctime else None
+            task_sync_time = datetime.now()
+
+        async def fetch_from_folder(folder):
+            try:
+                logger.info(f"Refreshing qitems for folder: {folder}")
+                # Use apply_async with async_res=True, handled by asyncio's run_in_executor
+                # functools.partial allows us to pass arguments to queue_items_get
+                queueitems_result = await asyncio.get_running_loop().run_in_executor(
+                    executor,
+                    functools.partial(
+                        uipclient_queueuitems.queue_items_get,
+                        select=select,
+                        filter=filter,
+                        x_uipath_organization_unit_id=folder,
+                        async_req=True,  # Ensuring async_res=True is passed correctly
+                    ),
+                )
+
+                # Wait for result completion
+                queueitems_response = queueitems_result.get()
+
+                # Process response and map it to QueueItems schema
+                queueitems = _APIResToListQueueItem(response=queueitems_response, objSchema=objSchema)
+                return queueitems
+            except ApiException as e:
+                logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
+                raise e
+
+        # Gather results from all folders in parallel
+        logger.info(f"Refreshing folders: {folderlist}")
+        tasks = [fetch_from_folder(folder) for folder in folderlist]
+        folder_results = await asyncio.gather(*tasks)
+
+        # Flatten results and insert into the database
+        for queueitems in folder_results:
+            try:
+                results.extend(queueitems)
+
+                # Insert/Update database (async)
+                crudobject = crud.uip_queue_item
+                _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=queueitems)
+
+            except Exception as e:
+                logger.error(f"Error when updating database: QueueItems: {e}")
+                raise e
+
+    logger.info("Queue Items refreshed")
+
+    if synctimes:
+        crud.tracked_synctimes.update_queueitemnew(db=db, newtime=task_sync_time)
+        logger.info(f"Queue Items New Info Successfully synced: '{filter}'")
+    return results
+
+
+@celery_app.task(bind=True, acks_late=True)
+def asynchelper_fetchqueueitems(self, upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
+    """A Celery task wrapper that runs the async fetch_queue_items_async function."""
+
+    # Ensure folderlist is initialized properly if None
+    folderlist = folderlist or []
+
+    # Define a simple wrapper function to run the async function
+    async def async_task_runner():
+        # Call your async function
+        return await fetch_queue_items_async(
+            upsert=upsert, fulldata=fulldata, folderlist=folderlist, filter=filter, synctimes=synctimes
+        )
+
+    # Run the async function using asyncio's event loop
+    result = asyncio.run(async_task_runner())
+
+    return result
+
+
 # -------------------------------
 # -------QueueItemEvents-----------
 # -------------------------------
@@ -561,5 +666,7 @@ def fetchsessions(upsert: bool = True, fulldata: bool = True, filter: str | None
         except Exception as e:
             logger.error(f"Error when updating database: Sessions: {e}")
             raise e
+    logger.info("sessions refreshed")
+    return sessions
     logger.info("sessions refreshed")
     return sessions
