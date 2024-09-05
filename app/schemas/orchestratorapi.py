@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import UUID4, BaseModel, ConfigDict
+from pydantic import UUID4, BaseModel, ConfigDict, field_validator
 
 # Schemas for UIpath API Calls
 
@@ -125,6 +125,12 @@ class QueueItemBase(BaseApiModel):
     OrganizationUnitId: int
     Id: int
     ProcessingException: Optional[ProcessingExceptionSchema] = None
+
+    @field_validator("StartProcessing", "EndProcessing", "CreationTime", mode="before")
+    def parse_datetime(cls, value):
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
 
 
 class QueueItemGETResponse(QueueItemBase):

@@ -4,7 +4,7 @@ from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 from fastapi.encoders import jsonable_encoder
 from loguru import logger
 from pydantic import BaseModel
-from sqlalchemy import delete
+from sqlalchemy import DateTime, delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -101,11 +101,24 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db.rollback()
             logger.error(e)
 
+    def parse_and_replace_datetimes(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
+        for key, value in json_data.items():
+            # Get the column property from the SQLAlchemy model. We instantiate a model
+            column = getattr(self.model().__class__.__table__.c, key, None)
+
+            if column is not None and isinstance(column.type, DateTime) and isinstance(value, str):
+                # Convert the string to datetime
+                json_data[key] = parse_datetime(value)
+
+        return json_data
+
     async def upsert_async(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType | None:
         """Helper function to "Upsert" -> If item is not created, create it
         If it already exists, just update it"""
         obj_in_data = jsonable_encoder(obj_in)
-        db_obj = self.model(**obj_in_data)  # type: ignore
+        # Parse the strings into datetime objects so the following conversion doesn't just ignore them
+        json_data = self.parse_and_replace_datetimes(obj_in_data)
+        db_obj = self.model(**json_data)  # type: ignore
         try:
             await db.merge(db_obj)
             await db.commit()
