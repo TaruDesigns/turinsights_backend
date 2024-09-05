@@ -69,6 +69,23 @@ class Settings(BaseSettings):
             path=f"{info.data.get('POSTGRES_DB') or ''}",
         ).unicode_string()
 
+    SQLALCHEMY_DATABASE_URI_ASYNC: Optional[str] = None
+
+    # TODO[pydantic]: We couldn't refactor the `validator`, please replace it by `field_validator` manually.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-validators for more information.
+    @field_validator("SQLALCHEMY_DATABASE_URI_ASYNC", mode="before")  # type: ignore
+    @classmethod
+    def assemble_db_connection_async(cls, v: Optional[str], info: ValidationInfo) -> Any:
+        if isinstance(v, str):
+            return v
+        return PostgresDsn.build(
+            scheme="postgresql+asyncpg",
+            username=info.data.get("POSTGRES_USER"),
+            password=info.data.get("POSTGRES_PASSWORD"),
+            host=info.data.get("POSTGRES_SERVER"),
+            path=f"{info.data.get('POSTGRES_DB') or ''}",
+        ).unicode_string()
+
     SMTP_TLS: bool = True
     SMTP_PORT: Optional[int] = None
     SMTP_HOST: Optional[str] = None

@@ -13,13 +13,13 @@ if __name__ == "__main__":
 
     from app.crud import uip_job
     from app.db.session import get_db
-    from app.worker.uipath import FetchUIPathToken, asynchelper_fetchqueueitems, fetchqueueitemevents, fetchqueueitems
+    from app.worker.uipath import FetchUIPathToken, fetchqueueitemevents, fetchqueueitems
 
     FetchUIPathToken()
     # fetchqueueitems(folderlist=[4572437])
-    result = asynchelper_fetchqueueitems()
+    result = fetchqueueitems()
 
-    print(a)
+    print("a")
 
     # from app.schedules.scheduler import refresh_jobsunfinished
     # asyncio.run(refresh_jobsunfinished())

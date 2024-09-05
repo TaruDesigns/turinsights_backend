@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, Generic, List, Optional, Type, TypeVar, Union
 
 from fastapi.encoders import jsonable_encoder
@@ -5,6 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.db.base_class import Base
@@ -12,6 +14,11 @@ from app.db.base_class import Base
 ModelType = TypeVar("ModelType", bound=Base)
 CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
+
+
+def parse_datetime(value):
+    # Helper for jsonable encoder
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
 class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
@@ -38,6 +45,14 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
+        return db_obj
+
+    async def create_async(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
+        obj_in_data = jsonable_encoder(obj_in)
+        db_obj = self.model(**obj_in_data)  # type: ignore
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
         return db_obj
 
     def update(
@@ -86,6 +101,19 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db.rollback()
             logger.error(e)
 
+    async def upsert_async(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType | None:
+        """Helper function to "Upsert" -> If item is not created, create it
+        If it already exists, just update it"""
+        obj_in_data = jsonable_encoder(obj_in)
+        db_obj = self.model(**obj_in_data)  # type: ignore
+        try:
+            await db.merge(db_obj)
+            await db.commit()
+            return db_obj
+        except IntegrityError as e:
+            await db.rollback()  # Let the context manager do the rollback
+            logger.error(e)
+
     def create_safe(self, db: Session, *, obj_in: CreateSchemaType) -> ModelType | None:
         """Helper function to "Create and ignore duplicate errors"""
         try:
@@ -94,4 +122,15 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         except IntegrityError as e:
             db.rollback()
             logger.warning(e)
+            return None
+
+    async def create_safe_async(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType | None:
+        """Helper function to "Create and ignore duplicate errors"""
+        try:
+            db_obj = await self.create_async(db=db, obj_in=obj_in)
+            return db_obj
+        except IntegrityError as e:
+            await db.rollback()
+            logger.warning(e)
+            return None
             return None
