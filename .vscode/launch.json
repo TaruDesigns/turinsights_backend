@@ -35,7 +35,7 @@
             "request": "launch",
             "program": "./debug.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false
         },        
         {
             "name": "Backend Remote",

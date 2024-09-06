@@ -65,7 +65,7 @@ def _CRUDHelper(
     upsert: bool = True,
     db: Session | None = None,
 ):
-    """CRUD Helper to reuse in other functions.
+    """CRUD Helper to reuse in other functions. Sync, mostly outdated
 
     Returns:
         True if values were added
@@ -95,6 +95,8 @@ def _APIResToList(response, objSchema):
 
 def _APIResToListQueueItem(response, objSchema):
     """Helper function to make a list of pydantic models from API Response
+    QueueItems have a slightly different approach because they have embedded schemas
+    #TODO expand ProcessingExceptioonReason and Details?
 
     Args:
         response (_type_): API Client Response
@@ -408,6 +410,10 @@ async def fetch_queue_items_async(
     select = objSchema.get_select_filter()
     logger.info("Refreshing Queue Items")
 
+    # TODO: Get the count and split into batches for performance
+    # uipclient_queueuitems.queue_items_get(select="Id", top=1, count="true", x_uipath_organization_unit_id=folderid)
+    # count_for_fodler = int(json.loads(uipclient_queueuitems.api_client.last_response.data)["@odata.count"])
+
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
 
@@ -453,7 +459,6 @@ async def fetch_queue_items_async(
             # Insert/Update database (async)
             crudobject = crud.uip_queue_item
             await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
-            # _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
         except Exception as e:
             logger.error(f"Error when updating database: QueueItems: {e}")
             raise e
