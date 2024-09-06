@@ -44,7 +44,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
 
     async def create_async(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType:
         obj_in_data = jsonable_encoder(obj_in)
-        db_obj = self.model(**obj_in_data)  # type: ignore
+        # Parse the strings into datetime objects so the following conversion doesn't just ignore them
+        json_data = self.parse_and_replace_datetimes(obj_in_data)
+        db_obj = self.model(**json_data)  # type: ignore
         db.add(db_obj)
         await db.commit()
         await db.refresh(db_obj)
@@ -68,6 +70,29 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
+        return db_obj
+
+    async def update_async(
+        self,
+        db: AsyncSession,
+        *,
+        db_obj: ModelType,
+        obj_in: Union[UpdateSchemaType, Dict[str, Any]],
+    ) -> ModelType:
+        obj_in_data = jsonable_encoder(obj_in)
+        # Parse the strings into datetime objects so the following conversion doesn't just ignore them
+        json_data = self.parse_and_replace_datetimes(obj_in_data)
+        db_obj = self.model(**json_data)  # type: ignore
+        if isinstance(obj_in, dict):
+            update_data = obj_in
+        else:
+            update_data = obj_in.dict(exclude_unset=True)
+        for field in json_data:
+            if field in update_data:
+                setattr(db_obj, field, update_data[field])
+        db.add(db_obj)
+        await db.commit()
+        await db.refresh(db_obj)
         return db_obj
 
     def remove(self, db: Session, *, id: int) -> ModelType:
@@ -139,12 +164,11 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             return None
 
     async def create_safe_async(self, db: AsyncSession, *, obj_in: CreateSchemaType) -> ModelType | None:
-        """Helper function to "Create and ignore duplicate errors"""
+        """Helper function to "Create and ignore duplicate errors, async"""
         try:
             db_obj = await self.create_async(db=db, obj_in=obj_in)
             return db_obj
         except IntegrityError as e:
             await db.rollback()
             logger.warning(e)
-            return None
             return None

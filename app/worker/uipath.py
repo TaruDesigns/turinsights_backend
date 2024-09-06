@@ -52,8 +52,7 @@ async def _CRUDHelper_async(
             if upsert:
                 return await crudobject.upsert_async(db=db, obj_in=obj)
             else:
-                # return await crudobject.create_safe_async(db=db, obj_in=obj)
-                pass
+                return await crudobject.create_safe_async(db=db, obj_in=obj)
 
     tasks = [process_object(ob) for ob in obj_in]
     results = await asyncio.gather(*tasks)
@@ -453,7 +452,7 @@ async def fetch_queue_items_async(
         try:
             # Insert/Update database (async)
             crudobject = crud.uip_queue_item
-            await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=True)
+            await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
             # _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
         except Exception as e:
             logger.error(f"Error when updating database: QueueItems: {e}")
@@ -468,7 +467,7 @@ async def fetch_queue_items_async(
 
 
 @celery_app.task(bind=True, acks_late=True)
-def fetchqueueitems(upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
+def fetchqueueitems(task=None, upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
     """A Celery task wrapper that runs the async fetch_queue_items_async function."""
 
     folderlist = folderlist or []
