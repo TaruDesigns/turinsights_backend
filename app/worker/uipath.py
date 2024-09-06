@@ -5,6 +5,7 @@ Note that the functions can also be used directly and they return the results fr
 
 import asyncio
 import functools
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
@@ -417,51 +418,108 @@ async def fetch_queue_items_async(
     with get_db() as db:
         _FolderChecker(db=db, folders=folderlist)
 
-        results = []
         if synctimes:
             lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
             filter = f"StartProcessing gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
 
-        async def fetch_from_folder(folder):
-            try:
-                logger.info(f"Refreshing qitems for folder: {folder}")
-                # Use apply_async with async_res=True, handled by asyncio's run_in_executor
-                # functools.partial allows us to pass arguments to queue_items_get
-                queueitems_result = await asyncio.get_running_loop().run_in_executor(
-                    executor,
-                    functools.partial(
-                        uipclient_queueuitems.queue_items_get,
-                        select=select,
-                        filter=filter,
-                        x_uipath_organization_unit_id=folder,
-                        async_req=True,  # Ensuring async_res=True is passed correctly
-                    ),
-                )
+    results = []
 
-                # Wait for result completion
-                queueitems_response = queueitems_result.get()
-
-                # Process response and map it to QueueItems schema
-                queueitems = _APIResToListQueueItem(response=queueitems_response, objSchema=objSchema)
-                return queueitems
-            except ApiException as e:
-                logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
-                raise e
-
-        # Gather results from all folders in parallel
-        logger.info(f"Refreshing folders: {folderlist}")
-        tasks = [fetch_from_folder(folder) for folder in folderlist]
-        folder_results = await asyncio.gather(*tasks)
-        # Flatten the results to avoid having list of lists
-        results = [item for sublist in folder_results for item in sublist]
+    async def fetch_from_folder(folder, top, skip):
         try:
-            # Insert/Update database (async)
-            crudobject = crud.uip_queue_item
-            await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
-        except Exception as e:
-            logger.error(f"Error when updating database: QueueItems: {e}")
+            logger.info(f"Refreshing qitems for folder: {folder}")
+            # Use apply_async with async_res=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to queue_items_get
+            queueitems_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_queueuitems.queue_items_get,
+                    select=select,
+                    filter=filter,
+                    x_uipath_organization_unit_id=folder,
+                    async_req=True,  # Ensuring async_res=True is passed correctly
+                    top=top,
+                    skip=skip,
+                ),
+            )
+            # Wait for result completion
+            queueitems_response = queueitems_result.get()
+            # Process response and map it to QueueItems schema
+            queueitems = _APIResToListQueueItem(response=queueitems_response, objSchema=objSchema)
+            return queueitems
+        except ApiException as e:
+            logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
             raise e
+
+    async def fetch_count_from_folder(folder):
+        try:
+            logger.debug(f"Getting total count of qitems for folder: {folder}")
+            # Use apply_async with async_res=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to queue_items_get
+            queueitems_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_queueuitems.queue_items_get,
+                    select="Id",
+                    filter=filter,
+                    count="true",
+                    x_uipath_organization_unit_id=folder,
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                ),
+            )
+            """
+            # ---- Manual request parameters ---
+            method = "GET"
+            url = uipclient_queueuitems.api_client.configuration.host + "/odata/QueueItems"
+            query_params=[('$filter', 'Id ne 0'), ('$select', 'Id'), ('$count', 'true')]
+            header_params={'X-UIPATH-OrganizationUnitId': folder, 'Accept': 'application/json', 'User-Agent': 'Swagger-Codegen/18.0/python', 'Authorization': 'Bearer token', 'Content-Type': 'application/json'}
+            post_params=[]
+            body=None
+            _preload_content=True
+            _request_timeout=None
+            # Manual API request
+            response_data = uipclient_queueuitems.api_client.request(
+            method, url, query_params=query_params, headers=header_params,
+            post_params=post_params, body=body,
+            _preload_content=_preload_content,
+            _request_timeout=_request_timeout)
+            
+            """
+            # Wait for result completion
+            queueitems_response = queueitems_result.get()
+            totalcount: int = queueitems_response[1]
+
+            logger.debug(f"Count for folder {folder} : {totalcount}")
+            return (folder, totalcount)
+        except ApiException as e:
+            logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
+            raise e
+
+    # Get counts for each folder
+    logger.info(f"Getting counts for qitems for folders: {folderlist}")
+    tasks = [fetch_count_from_folder(folder) for folder in folderlist]
+    foldercount_results = await asyncio.gather(*tasks)
+    # Gather results from all folders in parallel with batches of 100 max for each folder
+    logger.info(f"Refreshing qitems for folders: {folderlist}")
+    batchsize = 100  # More or less imposed by uipath api limits == top
+    top = batchsize
+    tasks = []
+    for folder, count in foldercount_results:
+        for start in range(0, count, batchsize):
+            skip = start
+            end = min(start + batchsize, count)
+            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+            tasks.append(fetch_from_folder(folder, top, skip))
+    folder_results = await asyncio.gather(*tasks)
+    # Flatten the results to avoid having list of lists
+    results = [item for sublist in folder_results for item in sublist]
+    try:
+        # Insert/Update database (async)
+        crudobject = crud.uip_queue_item
+        await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
+    except Exception as e:
+        logger.error(f"Error when updating database: QueueItems: {e}")
+        raise e
 
     logger.info("Queue Items refreshed")
 

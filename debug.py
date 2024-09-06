@@ -18,13 +18,13 @@ if __name__ == "__main__":
 
     FetchUIPathToken()
     # fetchqueueitems(folderlist=[4572437])
-    # result = fetchqueueitems()
+    result = fetchqueueitems()
 
-    from app.worker.uipath import uipclient_queueuitems
+    # from app.worker.uipath import uipclient_queueuitems
 
-    res = uipclient_queueuitems.queue_items_get(select="Id", top=1, count="true", x_uipath_organization_unit_id=4572437)
-    testresponse = int(json.loads(uipclient_queueuitems.api_client.last_response.data)["@odata.count"])
-    print(testresponse)
+    # res = uipclient_queueuitems.queue_items_get(select="Id", top=1, count="true", x_uipath_organization_unit_id=4572437)
+    # testresponse = int(json.loads(uipclient_queueuitems.api_client.last_response.data)["@odata.count"])
+    # print(testresponse)
 
     print("a")
 
