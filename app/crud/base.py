@@ -16,11 +16,6 @@ CreateSchemaType = TypeVar("CreateSchemaType", bound=BaseModel)
 UpdateSchemaType = TypeVar("UpdateSchemaType", bound=BaseModel)
 
 
-def parse_datetime(value):
-    # Helper for jsonable encoder
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-
-
 class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     def __init__(self, model: Type[ModelType]):
         """
@@ -101,14 +96,20 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
             db.rollback()
             logger.error(e)
 
+    def parse_datetime(self, value: str):
+        # Helper for jsonable encoder
+        # This might look like it doesn't do anything but, for some reason, if I make it return the value, it stops working.
+        dat = datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        return dat
+
     def parse_and_replace_datetimes(self, json_data: Dict[str, Any]) -> Dict[str, Any]:
         for key, value in json_data.items():
             # Get the column property from the SQLAlchemy model. We instantiate a model
             column = getattr(self.model().__class__.__table__.c, key, None)
-
+            # This makes it generic so we don't need to define which columns are datetime.
             if column is not None and isinstance(column.type, DateTime) and isinstance(value, str):
                 # Convert the string to datetime
-                json_data[key] = parse_datetime(value)
+                json_data[key] = self.parse_datetime(value)
 
         return json_data
 
