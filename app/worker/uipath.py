@@ -5,7 +5,6 @@ Note that the functions can also be used directly and they return the results fr
 
 import asyncio
 import functools
-import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
@@ -49,6 +48,7 @@ async def _CRUDHelper_async(
     Note, because it's async, each threadpool will get its own db session."""
 
     async def process_object(obj):
+        # Helper to run in threadpool
         async with get_db_async() as db:
             if upsert:
                 return await crudobject.upsert_async(db=db, obj_in=obj)
@@ -118,15 +118,6 @@ def _APIResToListQueueItem(response, objSchema):
     return res
 
 
-def validate_or_default_folderlist(folderlist: list[int] | None) -> list[int]:
-    # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
-    if not folderlist or folderlist == [0]:
-        with get_db() as db:
-            default_folderlist = crud.uip_folder.get_multi(db=db, skip=0, limit=100)
-            folderlist = [fol.Id for fol in default_folderlist]
-    return folderlist
-
-
 def _FolderChecker(folders: list[int] | None, db: Session | None = None):
     """Helper function to validate that the folders indicated do exist in the database
 
@@ -144,6 +135,18 @@ def _FolderChecker(folders: list[int] | None, db: Session | None = None):
     for folderid in folders:
         if crud.uip_folder.get(db=db, id=folderid) is None:
             raise ValueError(f"Folder not valid: No data for id: {folderid}")
+
+
+def validate_or_default_folderlist(folderlist: list[int] | None) -> list[int]:
+    # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
+    if not folderlist or folderlist == [0]:
+        with get_db() as db:
+            default_folderlist = crud.uip_folder.get_multi(db=db, skip=0, limit=100)
+            folderlist = [fol.Id for fol in default_folderlist]
+    else:
+        with get_db() as db:
+            _FolderChecker(folders=folderlist, db=db)
+    return folderlist
 
 
 @celery_app.task(acks_late=True)
@@ -185,7 +188,7 @@ def GetUIPathToken(uipclient_config: Configuration = uipclient_config) -> str:
 
 @celery_app.task(acks_late=True)
 def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
-    """Get folders and save in DB
+    """Get folders and save in DB. NOT ASYNC (not really needed)
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
         formdata (UIPFetchPostBody): Form Data (JSON Body)
@@ -223,15 +226,16 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
 # -------------------------------
 # ---------------Jobs------------
 # -------------------------------
-@celery_app.task(acks_late=True)
-def fetchjobs(
+
+
+async def fetch_jobs_async(
     upsert: bool = True,
     fulldata: bool = True,
     folderlist: list[int] | None = None,
     filter: str | None = None,
     synctimes: bool = False,
-) -> Any:
-    """Get Jobs and save in DB
+) -> list[schemas.JobGETResponse | schemas.JobGETResponse]:
+    """Get Jobs and save in DB, ASYNC
 
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
@@ -240,151 +244,383 @@ def fetchjobs(
     Returns:
         results: List of Jobs (Pydantic models)
     """
-    logger.info("Refreshing jobs")
     if fulldata:
         objSchema = schemas.JobGETResponseExtended
     else:
         objSchema = schemas.JobGETResponse
-    select = objSchema.get_select_filter()
     folderlist = validate_or_default_folderlist(folderlist)
-    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
-    with get_db() as db:
-        _FolderChecker(db=db, folders=folderlist)
-        results = []
-        if synctimes:
+    filter = filter if filter else "Id ne 0"
+    select = objSchema.get_select_filter()
+    logger.info("Refreshing Jobs")
+
+    if synctimes:
+        with get_db() as db:
             # Sync request -> use latest sync time
             lastsynctime = crud.tracked_synctimes.get_jobsstarted(db=db)
             filter = f"CreationTime gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
-        for folder in folderlist:  # folderlist will already be the IDs
-            try:
-                jobs = uipclient_jobs.jobs_get(
+
+    results = []
+
+    async def fetch_from_folder(folder, top, skip):
+        try:
+            logger.info(f"Refreshing Jobs for folder: {folder}")
+            # Use apply_async with async_req=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to jobs_get
+            jobs_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_jobs.jobs_get,
                     select=select,
                     filter=filter,
                     x_uipath_organization_unit_id=folder,
-                )
-                logger.info(f"Retrieved Jobs API Info for folder: {folder}")
-                joblist = _APIResToList(response=jobs, objSchema=objSchema)
-                results = results + joblist
-            except ApiException as e:
-                logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                    top=top,
+                    skip=skip,
+                ),
+            )
+            # Wait for result completion
+            jobs_response = jobs_result.get()
+            # Process response and map it to QueueItems schema
+            jobs = _APIResToListQueueItem(response=jobs_response, objSchema=objSchema)
+            return jobs
+        except ApiException as e:
+            logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
+            raise e
+
+    async def fetch_count_from_folder(folder):
         try:
-            crudobject = crud.uip_job
-            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
-            logger.info("Updated local Job info")
-        except Exception as e:
-            logger.error(f"Error when updating database: Jobs: {e}")
+            logger.debug(f"Getting total count of Jobs  for folder: {folder}")
+            # Use apply_async with async_req=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to jobs_get
+            jobs_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_jobs.jobs_get,
+                    select="Id",
+                    filter=filter,
+                    count="true",
+                    x_uipath_organization_unit_id=folder,
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                ),
+            )
+            # Wait for result completion
+            jobs_response = jobs_result.get()
+            totalcount: int = jobs_response[1]
+
+            logger.debug(f"Count for folder {folder} : {totalcount}")
+            return (folder, totalcount)
+        except ApiException as e:
+            logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
+            raise e
+
+    # Get counts for each folder
+    logger.info(f"Getting counts for Jobs for folders: {folderlist}")
+    tasks = [fetch_count_from_folder(folder) for folder in folderlist]
+    foldercount_results = await asyncio.gather(*tasks)
+    # Gather results from all folders in parallel with batches of 100 max for each folder
+    logger.info(f"Refreshing Jobs for folders: {folderlist}")
+    batchsize = 1000  # More or less imposed by uipath api limits == top
+    top = batchsize
+    tasks = []
+    for folder, count in foldercount_results:
+        for start in range(0, count, batchsize):
+            skip = start
+            end = min(start + batchsize, count)
+            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+            tasks.append(fetch_from_folder(folder, top, skip))
+    folder_results = await asyncio.gather(*tasks)
+    # Flatten the results to avoid having list of lists
+    results = [item for sublist in folder_results for item in sublist]
+    try:
+        # Insert/Update database (async)
+        crudobject = crud.uip_job
+        await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
+        logger.info("Updated job info")
+    except Exception as e:
+        logger.error(f"Error when updating database: Jobs: {e}")
+        raise e
+
     logger.info("Jobs refreshed")
+
     if synctimes:
         crud.tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
-        logger.info(f"Job Info Succesfully synced: '{filter}'")
+        logger.info(f"Jobs Info Successfully synced: '{filter}'")
     return results
+
+
+@celery_app.task(bind=True, acks_late=True)
+def fetchjobs(task=None, upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
+    """A Celery task wrapper that runs the async fetch_jobs_async function."""
+
+    folderlist = folderlist or []
+
+    async def async_task_runner():
+        return await fetch_jobs_async(
+            upsert=upsert, fulldata=fulldata, folderlist=folderlist, filter=filter, synctimes=synctimes
+        )
+
+    result = asyncio.run(async_task_runner())
+
+    return result
 
 
 # -------------------------------
 # ------------Processes---------
 # -------------------------------
-@celery_app.task(acks_late=True)
-def fetchprocesses(
+
+async def fetch_processes_async(
     upsert: bool = True,
     fulldata: bool = True,
     folderlist: list[int] | None = None,
     filter: str | None = None,
+    synctimes: bool = False,
 ) -> Any:
-    """Get Processes and save in DB
+    """Get Jobs and save in DB, ASYNC
 
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
         formdata (UIPFetchPostBody): Form Data (JSON Body)
 
     Returns:
-        results: List of Processes (Pydantic models)
+        results: List of Jobs (Pydantic models)
     """
-    logger.info("Refreshing processes")
-    folderlist = validate_or_default_folderlist(folderlist)
     if fulldata:
         objSchema = schemas.ProcessGETResponseExtended
     else:
         objSchema = schemas.ProcessGETResponse
+    folderlist = validate_or_default_folderlist(folderlist)
+    filter = filter if filter else "Id ne 0"
     select = objSchema.get_select_filter()
-    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
-    with get_db() as db:
-        _FolderChecker(db=db, folders=folderlist)
-        results = []
-        for folder in folderlist:  # folderlist will already be the IDs
-            try:
-                processes = uipclient_processes.releases_get(
+    logger.info("Refreshing Releases")
+    results = []
+
+    async def fetch_from_folder(folder, top, skip):
+        try:
+            logger.info(f"Refreshing Releases for folder: {folder}")
+            # Use apply_async with async_req=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to releases_get
+            releases_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_processes.releases_get,
                     select=select,
                     filter=filter,
                     x_uipath_organization_unit_id=folder,
-                )
-                logger.info(f"Retrieved Processes API Info for folder: {folder}")
-                processes = _APIResToList(response=processes, objSchema=objSchema)
-                results = results + processes
-            except ApiException as e:
-                logger.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
-        try:
-            crudobject = crud.uip_process
-            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
-            logger.info("Processes stored in DB")
-        except Exception as e:
-            logger.error(f"Error when updating database: Processes: {e}")
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                    top=top,
+                    skip=skip,
+                ),
+            )
+            # Wait for result completion
+            releases_response = releases_result.get()
+            # Process response and map it to QueueItems schema
+            releases = _APIResToListQueueItem(response=releases_response, objSchema=objSchema)
+            return releases
+        except ApiException as e:
+            logger.error(f"Exception when calling RealsesAPI->releases_get: {e.body}")
             raise e
+
+    async def fetch_count_from_folder(folder):
+        try:
+            logger.debug(f"Getting total count of Releases for folder: {folder}")
+            # Use apply_async with async_req=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to releases_get
+            releases_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_processes.releases_get,
+                    select="Id",
+                    filter=filter,
+                    count="true",
+                    x_uipath_organization_unit_id=folder,
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                ),
+            )
+            # Wait for result completion
+            releases_response = releases_result.get()
+            totalcount: int = releases_response[1]
+
+            logger.debug(f"Count for folder {folder} : {totalcount}")
+            return (folder, totalcount)
+        except ApiException as e:
+            logger.error(f"Exception when calling ReelasesAPI->releases_get: {e.body}")
+            raise e
+
+    # Get counts for each folder
+    logger.info(f"Getting counts for Releases for folders: {folderlist}")
+    tasks = [fetch_count_from_folder(folder) for folder in folderlist]
+    foldercount_results = await asyncio.gather(*tasks)
+    # Gather results from all folders in parallel with batches of 100 max for each folder
+    logger.info(f"Refreshing Releases for folders: {folderlist}")
+    batchsize = 1000  # More or less imposed by uipath api limits == top
+    top = batchsize
+    tasks = []
+    for folder, count in foldercount_results:
+        for start in range(0, count, batchsize):
+            skip = start
+            end = min(start + batchsize, count)
+            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+            tasks.append(fetch_from_folder(folder, top, skip))
+    folder_results = await asyncio.gather(*tasks)
+    # Flatten the results to avoid having list of lists
+    results = [item for sublist in folder_results for item in sublist]
+    try:
+        # Insert/Update database (async)
+        crudobject = crud.uip_process
+        await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
+        logger.info("Updated job info")
+    except Exception as e:
+        logger.error(f"Error when updating database: Processes: {e}")
+        raise e
+
     logger.info("Processes refreshed")
     return results
+
+
+@celery_app.task(bind=True, acks_late=True)
+def fetchprocesses(task=None, upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
+    """A Celery task wrapper that runs the async fetch_processes_async function."""
+
+    folderlist = folderlist or []
+
+    async def async_task_runner():
+        return await fetch_processes_async(
+            upsert=upsert, fulldata=fulldata, folderlist=folderlist, filter=filter, synctimes=synctimes
+        )
+
+    result = asyncio.run(async_task_runner())
+
+    return result
 
 
 # -------------------------------
 # ----------QueueDefinitions---
 # -------------------------------
-@celery_app.task(acks_late=True)
-def fetchqueuedefinitions(
+
+async def fetch_queuedefinitions_async(
     upsert: bool = True,
     fulldata: bool = True,
     folderlist: list[int] | None = None,
     filter: str | None = None,
+    synctimes: bool = False,
 ) -> Any:
-    """Get Queue Definitions and save in DB (optional). Set formdata.cruddb to True
+    """Get Jobs and save in DB, ASYNC
 
     Args:
         db (Session, optional): Database session. Defaults to Depends(deps.get_db).
         formdata (UIPFetchPostBody): Form Data (JSON Body)
 
     Returns:
-        results: List of QueueDefinitions (Pydantic models)
+        results: List of Jobs (Pydantic models)
     """
-    logger.info("Refreshing queuedefinitions")
     if fulldata:
         objSchema = schemas.QueueDefinitionGETResponseExtended
     else:
         objSchema = schemas.QueueDefinitionGETResponse
-    select = objSchema.get_select_filter()
     folderlist = validate_or_default_folderlist(folderlist)
-    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
-    with get_db() as db:
-        _FolderChecker(db=db, folders=folderlist)
-        results = []
-        for folder in folderlist:  # folderlist will already be the IDs
-            try:
-                queuedefinitions = uipclient_queuedefinitions.queue_definitions_get(
+    filter = filter if filter else "Id ne 0"
+    select = objSchema.get_select_filter()
+    logger.info("Refreshing Queue Definitions")
+    results = []
+
+    async def fetch_from_folder(folder, top, skip):
+        try:
+            logger.info(f"Refreshing Releases for folder: {folder}")
+            # Use apply_async with async_req=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to queue_definitions_get
+            queue_definitions_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_queuedefinitions.queue_definitions_get,
                     select=select,
                     filter=filter,
                     x_uipath_organization_unit_id=folder,
-                )
-                queuedefinitions = _APIResToList(response=queuedefinitions, objSchema=objSchema)
-                logger.info(f"Retrieved API Info for Queue Definitoins on folder {folder}")
-                results = results + queuedefinitions
-            except ApiException as e:
-                logger.error(f"Exception when calling QueueDefinitionsAPI->queuedefinitions_get {e.body}")
-        try:
-            crudobject = crud.uip_queue_definitions
-            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)
-            logger.info("Updated QueueDefinitions in DB")
-        except Exception as e:
-            logger.error(f"Error when updating database: QueueDefinitions: {e}")
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                    top=top,
+                    skip=skip,
+                ),
+            )
+            # Wait for result completion
+            queue_definitions_response = queue_definitions_result.get()
+            # Process response and map it to QueueItems schema
+            queue_definitions = _APIResToListQueueItem(response=queue_definitions_response, objSchema=objSchema)
+            return queue_definitions
+        except ApiException as e:
+            logger.error(f"Exception when calling QueueDefinitionsAPI->queue_definitions_get: {e.body}")
             raise e
-    logger.info("QueueDefinitions refreshed")
+
+    async def fetch_count_from_folder(folder):
+        try:
+            logger.debug(f"Getting total count of Releases for folder: {folder}")
+            # Use apply_async with async_req=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to queue_definitions_get
+            queue_definitions_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_queuedefinitions.queue_definitions_get,
+                    select="Id",
+                    filter=filter,
+                    count="true",
+                    x_uipath_organization_unit_id=folder,
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                ),
+            )
+            # Wait for result completion
+            queue_definitions_response = queue_definitions_result.get()
+            totalcount: int = queue_definitions_response[1]
+
+            logger.debug(f"Count for folder {folder} : {totalcount}")
+            return (folder, totalcount)
+        except ApiException as e:
+            logger.error(f"Exception when calling QueueDefinitionsAPI->queue_definitions_get: {e.body}")
+            raise e
+
+    # Get counts for each folder
+    logger.info(f"Getting counts for Queue Definitions for folders: {folderlist}")
+    tasks = [fetch_count_from_folder(folder) for folder in folderlist]
+    foldercount_results = await asyncio.gather(*tasks)
+    # Gather results from all folders in parallel with batches of 100 max for each folder
+    logger.info(f"Refreshing Queue Definitions for folders: {folderlist}")
+    batchsize = 1000  # More or less imposed by uipath api limits == top
+    top = batchsize
+    tasks = []
+    for folder, count in foldercount_results:
+        for start in range(0, count, batchsize):
+            skip = start
+            end = min(start + batchsize, count)
+            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+            tasks.append(fetch_from_folder(folder, top, skip))
+    folder_results = await asyncio.gather(*tasks)
+    # Flatten the results to avoid having list of lists
+    results = [item for sublist in folder_results for item in sublist]
+    try:
+        # Insert/Update database (async)
+        crudobject = crud.uip_queue_definitions
+        await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
+        logger.info("Updated job info")
+    except Exception as e:
+        logger.error(f"Error when updating database: Queue Definitoins: {e}")
+        raise e
+
+    logger.info("Queue Definitions refreshed")
     return results
+
+
+@celery_app.task(bind=True, acks_late=True)
+def fetchqueuedefinitions(task=None, upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
+    """A Celery task wrapper that runs the async fetch_queuedefinitions_async function."""
+
+    folderlist = folderlist or []
+
+    async def async_task_runner():
+        return await fetch_queuedefinitions_async(
+            upsert=upsert, fulldata=fulldata, folderlist=folderlist, filter=filter, synctimes=synctimes
+        )
+
+    result = asyncio.run(async_task_runner())
+
+    return result
 
 
 # -------------------------------
@@ -410,15 +646,12 @@ async def fetch_queue_items_async(
     filter = filter if filter else "Id ne 0"
     select = objSchema.get_select_filter()
     logger.info("Refreshing Queue Items")
+    
+    if synctimes:
+        with get_db() as db:
 
-    # TODO: Get the count and split into batches for performance
-    # uipclient_queueuitems.queue_items_get(select="Id", top=1, count="true", x_uipath_organization_unit_id=folderid)
-    # count_for_fodler = int(json.loads(uipclient_queueuitems.api_client.last_response.data)["@odata.count"])
-
-    with get_db() as db:
-        _FolderChecker(db=db, folders=folderlist)
-
-        if synctimes:
+    if synctimes:
+        with get_db() as db:
             lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
             filter = f"StartProcessing gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
@@ -467,24 +700,6 @@ async def fetch_queue_items_async(
                     async_req=True,  # Ensuring async_req=True is passed correctly
                 ),
             )
-            """
-            # ---- Manual request parameters ---
-            method = "GET"
-            url = uipclient_queueuitems.api_client.configuration.host + "/odata/QueueItems"
-            query_params=[('$filter', 'Id ne 0'), ('$select', 'Id'), ('$count', 'true')]
-            header_params={'X-UIPATH-OrganizationUnitId': folder, 'Accept': 'application/json', 'User-Agent': 'Swagger-Codegen/18.0/python', 'Authorization': 'Bearer token', 'Content-Type': 'application/json'}
-            post_params=[]
-            body=None
-            _preload_content=True
-            _request_timeout=None
-            # Manual API request
-            response_data = uipclient_queueuitems.api_client.request(
-            method, url, query_params=query_params, headers=header_params,
-            post_params=post_params, body=body,
-            _preload_content=_preload_content,
-            _request_timeout=_request_timeout)
-            
-            """
             # Wait for result completion
             queueitems_response = queueitems_result.get()
             totalcount: int = queueitems_response[1]
@@ -548,57 +763,111 @@ def fetchqueueitems(task=None, upsert=True, fulldata=True, folderlist=None, filt
 # -------------------------------
 # -------QueueItemEvents-----------
 # -------------------------------
-@celery_app.task(acks_late=True)
-def fetchqueueitemevents(
+
+
+async def fetch_queue_item_events_async(
     upsert: bool = True,
     fulldata: bool = True,
     folderlist: list[int] | None = None,
     filter: str | None = None,
     synctimes: bool = False,
 ) -> Any:
-    """Get Queue Item Events and save in DB (optional). Set formdata.cruddb to True
+    """Get QueueItem Events and save in DB (optional). Set formdata.cruddb to True"""
 
-    Args:
-        db (Session, optional): Database session. Defaults to Depends(deps.get_db).
-        formdata (UIPFetchPostBody): Form Data (JSON Body)
-
-    Returns:
-        results: List of QueueItemEvents (Pydantic models)
-    """
-    logger.info("Refreshing queueitemevent")
     if fulldata:
         objSchema = schemas.QueueItemEventGETResponseExtended
     else:
         objSchema = schemas.QueueItemEventGETResponse
     folderlist = validate_or_default_folderlist(folderlist)
+    filter = filter if filter else "Id ne 0"
     select = objSchema.get_select_filter()
-    filter = filter if filter else "Id ne 0"  # This is just a hack to avoid having to duplicate code
-    with get_db() as db:
-        _FolderChecker(db=db, folders=folderlist)
-        results: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse] = []
-        if synctimes:
-            lastsynctime = crud.tracked_synctimes.get_queueitemevent(db=db)
+    logger.info("Refreshing Queue Item Events")
+
+    if synctimes:
+        with get_db() as db:
+            lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
             filter = f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
-        for folder in folderlist:  # folderlist will already be the IDs
-            try:
-                queueitems = uipclient_queueuitemevents.queue_item_events_get(
+    results = []
+
+    async def fetch_from_folder(folder, top, skip):
+        try:
+            logger.info(f"Refreshing qitem events for folder: {folder}")
+            # Use apply_async with async_res=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to queue_items_get
+            queueitems_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_queueuitemevents.queue_item_events_get,
                     select=select,
                     filter=filter,
                     x_uipath_organization_unit_id=folder,
-                )
-                queueitems = _APIResToList(response=queueitems, objSchema=objSchema)
-                results = results + queueitems
-            except ApiException as e:
-                logger.error(f"Exception when calling QueueItemsAPI->queueItems_get: {e.body}")
-                raise e
+                    async_req=True,  # Ensuring async_res=True is passed correctly
+                    top=top,
+                    skip=skip,
+                ),
+            )
+            # Wait for result completion
+            queueitems_response = queueitems_result.get()
+            # Process response and map it to QueueItems schema
+            queueitems = _APIResToListQueueItem(response=queueitems_response, objSchema=objSchema)
+            return queueitems
+        except ApiException as e:
+            logger.error(f"Exception when calling QueueItemsEventAPI->queueItemsEvent_get: {e.body}")
+            raise e
 
+    async def fetch_count_from_folder(folder):
+        try:
+            logger.debug(f"Getting total count of Qitem Events for folder: {folder}")
+            # Use apply_async with async_res=True, handled by asyncio's run_in_executor
+            # functools.partial allows us to pass arguments to queue_items_get
+            queueitems_result = await asyncio.get_running_loop().run_in_executor(
+                executor,
+                functools.partial(
+                    uipclient_queueuitems.queue_items_get,
+                    select="Id",
+                    filter=filter,
+                    count="true",
+                    x_uipath_organization_unit_id=folder,
+                    async_req=True,  # Ensuring async_req=True is passed correctly
+                ),
+            )
+            # Wait for result completion
+            queueitems_response = queueitems_result.get()
+            totalcount: int = queueitems_response[1]
+
+            logger.debug(f"Count for folder {folder} : {totalcount}")
+            return (folder, totalcount)
+        except ApiException as e:
+            logger.error(f"Exception when calling QueueItemsEventAPI->queueItemsEvent_get: {e.body}")
+            raise e
+
+    # Get counts for each folder
+    logger.info(f"Getting counts for QItem Events for folders: {folderlist}")
+    tasks = [fetch_count_from_folder(folder) for folder in folderlist]
+    foldercount_results = await asyncio.gather(*tasks)
+    # Gather results from all folders in parallel with batches of 100 max for each folder
+    logger.info(f"Refreshing QItem Events for folders: {folderlist}")
+    batchsize = 1000  # More or less imposed by uipath api limits == top
+    top = batchsize
+    tasks = []
+    for folder, count in foldercount_results:
+        for start in range(0, count, batchsize):
+            skip = start
+            end = min(start + batchsize, count)
+            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+            tasks.append(fetch_from_folder(folder, top, skip))
+    folder_results = await asyncio.gather(*tasks)
+    # Flatten the results to avoid having list of lists
+    results = [item for sublist in folder_results for item in sublist]
+
+    # ---Special QItem Event Login
     if results:
         # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
-        sync_events_to_items(queueitemevents=results)
+        sync_events_to_items(queueitemevents=results)  # TODO: Make this Async
         try:
             crudobject = crud.uip_queue_item_event
-            _CRUDHelper(crudobject=crudobject, upsert=upsert, db=db, obj_in=results)  # type: ignore
+            await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
         except Exception as e:
             logger.error(f"Error when updating database: QueueItemEvents: {e}")
             raise e
@@ -639,14 +908,30 @@ def sync_events_to_items(
     if ids_not_in_db:
         logger.info("Getting new queue items")
         filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
-        fetchqueueitems(upsert=False, fulldata=True, filter=filter)
+        fetchqueueitems(upsert=False, fulldata=True, filter=filter)  # TODO: This might break
         logger.info("New queue items added")
     if existing_ids:
         # Update
         logger.info("Updating items")
         filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
-        fetchqueueitems(upsert=True, fulldata=False, filter=filter)
+        fetchqueueitems(upsert=True, fulldata=False, filter=filter)  # TODO: This might break
         logger.info("Items updated")
+
+
+@celery_app.task(bind=True, acks_late=True)
+def fetchqueueitemevents(task=None, upsert=True, fulldata=True, folderlist=None, filter=None, synctimes=False):
+    """A Celery task wrapper that runs the async fetch_queue_item_events_async function."""
+
+    folderlist = folderlist or []
+
+    async def async_task_runner():
+        return await fetch_queue_item_events_async(
+            upsert=upsert, fulldata=fulldata, folderlist=folderlist, filter=filter, synctimes=synctimes
+        )
+
+    result = asyncio.run(async_task_runner())
+
+    return result
 
 
 # -------------------
@@ -688,7 +973,5 @@ def fetchsessions(upsert: bool = True, fulldata: bool = True, filter: str | None
         except Exception as e:
             logger.error(f"Error when updating database: Sessions: {e}")
             raise e
-    logger.info("sessions refreshed")
-    return sessions
     logger.info("sessions refreshed")
     return sessions
