@@ -197,7 +197,6 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
         folderlist: List of Folders (Pydantic models)
     """
     logger.info("Refreshing folders")
-    GetUIPathToken(uipclient_config=uipclient_config)
     if fulldata:
         objSchema = schemas.FolderGETResponse  # Extended
     else:
@@ -282,7 +281,7 @@ async def fetch_jobs_async(
             # Wait for result completion
             jobs_response = jobs_result.get()
             # Process response and map it to QueueItems schema
-            jobs = _APIResToListQueueItem(response=jobs_response, objSchema=objSchema)
+            jobs = _APIResToList(response=jobs_response, objSchema=objSchema)
             return jobs
         except ApiException as e:
             logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
@@ -324,11 +323,12 @@ async def fetch_jobs_async(
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
-        for start in range(0, count, batchsize):
-            skip = start
-            end = min(start + batchsize, count)
-            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
-            tasks.append(fetch_from_folder(folder, top, skip))
+        if count > 0:
+            for start in range(0, count, batchsize):
+                skip = start
+                end = min(start + batchsize, count)
+                logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+                tasks.append(fetch_from_folder(folder, top, skip))
     folder_results = await asyncio.gather(*tasks)
     # Flatten the results to avoid having list of lists
     results = [item for sublist in folder_results for item in sublist]
@@ -368,6 +368,7 @@ def fetchjobs(task=None, upsert=True, fulldata=True, folderlist=None, filter=Non
 # -------------------------------
 # ------------Processes---------
 # -------------------------------
+
 
 async def fetch_processes_async(
     upsert: bool = True,
@@ -414,11 +415,11 @@ async def fetch_processes_async(
             )
             # Wait for result completion
             releases_response = releases_result.get()
-            # Process response and map it to QueueItems schema
-            releases = _APIResToListQueueItem(response=releases_response, objSchema=objSchema)
+            # Process response and map it to Processes schema
+            releases = _APIResToList(response=releases_response, objSchema=objSchema)
             return releases
         except ApiException as e:
-            logger.error(f"Exception when calling RealsesAPI->releases_get: {e.body}")
+            logger.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")
             raise e
 
     async def fetch_count_from_folder(folder):
@@ -430,7 +431,7 @@ async def fetch_processes_async(
                 executor,
                 functools.partial(
                     uipclient_processes.releases_get,
-                    select="Id",
+                    select="Id, ProcessKey, ProcessVersion, Name",
                     filter=filter,
                     count="true",
                     x_uipath_organization_unit_id=folder,
@@ -457,11 +458,12 @@ async def fetch_processes_async(
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
-        for start in range(0, count, batchsize):
-            skip = start
-            end = min(start + batchsize, count)
-            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
-            tasks.append(fetch_from_folder(folder, top, skip))
+        if count > 0:
+            for start in range(0, count, batchsize):
+                skip = start
+                end = min(start + batchsize, count)
+                logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+                tasks.append(fetch_from_folder(folder, top, skip))
     folder_results = await asyncio.gather(*tasks)
     # Flatten the results to avoid having list of lists
     results = [item for sublist in folder_results for item in sublist]
@@ -469,7 +471,7 @@ async def fetch_processes_async(
         # Insert/Update database (async)
         crudobject = crud.uip_process
         await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
-        logger.info("Updated job info")
+        logger.info("Updated processes info")
     except Exception as e:
         logger.error(f"Error when updating database: Processes: {e}")
         raise e
@@ -497,6 +499,7 @@ def fetchprocesses(task=None, upsert=True, fulldata=True, folderlist=None, filte
 # -------------------------------
 # ----------QueueDefinitions---
 # -------------------------------
+
 
 async def fetch_queuedefinitions_async(
     upsert: bool = True,
@@ -543,8 +546,8 @@ async def fetch_queuedefinitions_async(
             )
             # Wait for result completion
             queue_definitions_response = queue_definitions_result.get()
-            # Process response and map it to QueueItems schema
-            queue_definitions = _APIResToListQueueItem(response=queue_definitions_response, objSchema=objSchema)
+            # Process response and map it to Process schema
+            queue_definitions = _APIResToList(response=queue_definitions_response, objSchema=objSchema)
             return queue_definitions
         except ApiException as e:
             logger.error(f"Exception when calling QueueDefinitionsAPI->queue_definitions_get: {e.body}")
@@ -559,7 +562,7 @@ async def fetch_queuedefinitions_async(
                 executor,
                 functools.partial(
                     uipclient_queuedefinitions.queue_definitions_get,
-                    select="Id",
+                    select="Id, Name",
                     filter=filter,
                     count="true",
                     x_uipath_organization_unit_id=folder,
@@ -586,11 +589,12 @@ async def fetch_queuedefinitions_async(
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
-        for start in range(0, count, batchsize):
-            skip = start
-            end = min(start + batchsize, count)
-            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
-            tasks.append(fetch_from_folder(folder, top, skip))
+        if count > 0:
+            for start in range(0, count, batchsize):
+                skip = start
+                end = min(start + batchsize, count)
+                logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+                tasks.append(fetch_from_folder(folder, top, skip))
     folder_results = await asyncio.gather(*tasks)
     # Flatten the results to avoid having list of lists
     results = [item for sublist in folder_results for item in sublist]
@@ -646,9 +650,6 @@ async def fetch_queue_items_async(
     filter = filter if filter else "Id ne 0"
     select = objSchema.get_select_filter()
     logger.info("Refreshing Queue Items")
-    
-    if synctimes:
-        with get_db() as db:
 
     if synctimes:
         with get_db() as db:
@@ -720,11 +721,12 @@ async def fetch_queue_items_async(
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
-        for start in range(0, count, batchsize):
-            skip = start
-            end = min(start + batchsize, count)
-            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
-            tasks.append(fetch_from_folder(folder, top, skip))
+        if count > 0:
+            for start in range(0, count, batchsize):
+                skip = start
+                end = min(start + batchsize, count)
+                logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+                tasks.append(fetch_from_folder(folder, top, skip))
     folder_results = await asyncio.gather(*tasks)
     # Flatten the results to avoid having list of lists
     results = [item for sublist in folder_results for item in sublist]
@@ -809,8 +811,8 @@ async def fetch_queue_item_events_async(
             )
             # Wait for result completion
             queueitems_response = queueitems_result.get()
-            # Process response and map it to QueueItems schema
-            queueitems = _APIResToListQueueItem(response=queueitems_response, objSchema=objSchema)
+            # Process response and map it to QueueItemEvents schema
+            queueitems = _APIResToList(response=queueitems_response, objSchema=objSchema)
             return queueitems
         except ApiException as e:
             logger.error(f"Exception when calling QueueItemsEventAPI->queueItemsEvent_get: {e.body}")
@@ -852,11 +854,12 @@ async def fetch_queue_item_events_async(
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
-        for start in range(0, count, batchsize):
-            skip = start
-            end = min(start + batchsize, count)
-            logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
-            tasks.append(fetch_from_folder(folder, top, skip))
+        if count > 0:
+            for start in range(0, count, batchsize):
+                skip = start
+                end = min(start + batchsize, count)
+                logger.debug(f"Adding batch: {start + 1} to {end} for folder {folder}")
+                tasks.append(fetch_from_folder(folder, top, skip))
     folder_results = await asyncio.gather(*tasks)
     # Flatten the results to avoid having list of lists
     results = [item for sublist in folder_results for item in sublist]

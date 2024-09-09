@@ -9,17 +9,43 @@ if __name__ == "__main__":
     # Debug whole app
     import asyncio
     import json
+    from time import sleep
 
     import uvicorn
 
     from app.crud import uip_job
     from app.db.session import get_db
-    from app.worker.uipath import FetchUIPathToken, fetchqueueitemevents, fetchqueueitems
+    from app.worker.uipath import (
+        FetchUIPathToken,
+        fetchfolders,
+        fetchjobs,
+        fetchprocesses,
+        fetchqueuedefinitions,
+        fetchqueueitemevents,
+        fetchqueueitems,
+        fetchsessions,
+    )
 
     FetchUIPathToken()
     # fetchqueueitems(folderlist=[4572437])
-    result = fetchqueueitems()
+    # result = fetchfolders()
+    # print(result)
+    # result = fetchjobs()
+    # print(result)
+    # sleep(1)
+    result = fetchprocesses()
+    print(result)
+    """
+    result = fetchqueuedefinitions()
+    print(result)
+    result = fetchsessions()
+    print(result)
 
+    result = fetchqueueitems()
+    print(result)
+
+    print(result)
+"""
     # from app.worker.uipath import uipclient_queueuitems
 
     # res = uipclient_queueuitems.queue_items_get(select="Id", top=1, count="true", x_uipath_organization_unit_id=4572437)
