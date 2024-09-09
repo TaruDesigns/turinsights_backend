@@ -28,30 +28,13 @@ if __name__ == "__main__":
 
     FetchUIPathToken()
     # fetchqueueitems(folderlist=[4572437])
-    result = fetchfolders()
-    print(result)
-    result = fetchjobs()
-    print(result)
-    result = fetchprocesses()
-    print(result)
-    result = fetchqueuedefinitions()
-    print(result)
-    result = fetchsessions()
-    print(result)
-    result = fetchqueueitems()
-    print(result)
-    """
-
-
-    print(result)
-"""
-    # from app.worker.uipath import uipclient_queueuitems
-
-    # res = uipclient_queueuitems.queue_items_get(select="Id", top=1, count="true", x_uipath_organization_unit_id=4572437)
-    # testresponse = int(json.loads(uipclient_queueuitems.api_client.last_response.data)["@odata.count"])
-    # print(testresponse)
-
-    print("a")
+    # result = fetchfolders()
+    # result = fetchjobs()
+    # result = fetchprocesses()
+    # result = fetchqueuedefinitions()
+    # result = fetchsessions()
+    # result = fetchqueueitems()
+    result = fetchqueueitemevents()
 
     # from app.schedules.scheduler import refresh_jobsunfinished
     # asyncio.run(refresh_jobsunfinished())

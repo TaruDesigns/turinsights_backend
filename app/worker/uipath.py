@@ -36,7 +36,7 @@ from app.core.uipapiconfig import (
 from app.crud.base import CRUDBase
 from app.db.session import get_db, get_db_async
 
-executor = ThreadPoolExecutor(max_workers=1)
+executor = ThreadPoolExecutor(max_workers=20)
 
 
 async def _CRUDHelper_async(
@@ -45,7 +45,13 @@ async def _CRUDHelper_async(
     upsert: bool = True,
 ):
     """CRUD Helper to reuse in other functions asynchronously.
-    Note, because it's async, each threadpool will get its own db session."""
+    Note, because it's async, each threadpool will get its own db session.
+    Performance wise it seems it's not worth it"""
+    with get_db() as db:
+        _CRUDHelper(obj_in=obj_in, crudobject=crudobject, upsert=upsert, db=db)
+    # return
+
+    logger.debug("DB Async")
 
     async def process_object(obj):
         # Helper to run in threadpool
@@ -56,7 +62,18 @@ async def _CRUDHelper_async(
                 return await crudobject.create_safe_async(db=db, obj_in=obj)
 
     tasks = [process_object(ob) for ob in obj_in]
-    results = await asyncio.gather(*tasks)
+
+    # Split on batches to avoid creating too many DB connections
+    batch_size = 5
+    if len(tasks) > batch_size:  # TODO set it based on max client connections from env
+        batches = [tasks[i : i + batch_size] for i in range(0, len(tasks), batch_size)]
+        results = []
+        for i, batch in enumerate(batches):
+            logger.debug(f"DB CRUD Batch {i}")
+            partials = await asyncio.gather(*batch)
+            results.extend(partials)
+    else:
+        results = await asyncio.gather(*tasks)
     return results
 
 
@@ -867,7 +884,8 @@ async def fetch_queue_item_events_async(
     # ---Special QItem Event Login
     if results:
         # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
-        sync_events_to_items(queueitemevents=results)  # TODO: Make this Async
+        # sync_events_to_items(queueitemevents=results)  # TODO: Make this Async
+        await sync_events_to_items_async(queueitemevents=results)  # TODO: Make this Async
         try:
             crudobject = crud.uip_queue_item_event
             await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
@@ -919,6 +937,51 @@ def sync_events_to_items(
         filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
         fetchqueueitems(upsert=True, fulldata=False, filter=filter)  # TODO: This might break
         logger.info("Items updated")
+
+
+async def sync_events_to_items_async(
+    queueitemevents: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse],
+):
+    """This function syncs the queueitemevents to the state in the DB The business logic is:
+        - If the item is NOT in the database, it needs to be inserted.
+            In order to do that, we retrieve its full data (API -> GetQueueItem) and upsert
+        - If the item IS in the database, we retrieve the latest data,
+            selecting so we only get the data we need from the API for performance (no fulldata)
+        Note that in order to update the QueueItemData we don't actually hit the database for each and every QueueItemEvent
+        because we only care about the latest data.
+        We also don't care if the item is in its final state (eg, multiple Events)
+            but the Database never saw it (eg the QueueItemId is not found)
+            because we will just get the fulldata (including its final state) anyway
+        But we have previously inserted ALL the QueueItemEvents in its table.
+
+        #TODO: This could in theory be another celery task, but one that is ONLY launched after retrieving Events.
+
+    Args:
+        queueitemevents (schemas.QueueItemEventGETResponse, optional): _description_. Defaults to None.
+    """
+
+    #
+    unique_qitem_ids = list(set(item.QueueItemId for item in queueitemevents))
+    with get_db() as db:
+        # Split queueitemevents into two buckets: One for items that are not in DB and one that are in DB (based on QueueItemId)
+        existing_ids, ids_not_in_db = crud.uip_queue_item.get_by_id_list_split(db=db, ids=unique_qitem_ids)
+        # Get New
+    tasks = []
+    if ids_not_in_db:
+        logger.info("Getting new queue items")
+        filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
+        # fetchqueueitems(upsert=False, fulldata=True, filter=filter)  # TODO: This might break
+        # tasks.append(fetch_queue_item_events_async(upsert=True, fulldata=False, filter=filter))
+        logger.info("New queue items added")
+    if existing_ids:
+        # Update
+        logger.info("Updating items")
+        filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
+        # fetchqueueitems(upsert=True, fulldata=False, filter=filter)  # TODO: This might brea
+        tasks.append(fetch_queue_item_events_async(upsert=True, fulldata=False, filter=filter))
+        # await fetch_queue_item_events_async(upsert=True, fulldata=False, filter=filter)
+        logger.info("Items updated")
+    await asyncio.gather(*tasks)
 
 
 @celery_app.task(bind=True, acks_late=True)
