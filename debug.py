@@ -28,21 +28,20 @@ if __name__ == "__main__":
 
     FetchUIPathToken()
     # fetchqueueitems(folderlist=[4572437])
-    # result = fetchfolders()
-    # print(result)
-    # result = fetchjobs()
-    # print(result)
-    # sleep(1)
+    result = fetchfolders()
+    print(result)
+    result = fetchjobs()
+    print(result)
     result = fetchprocesses()
     print(result)
-    """
     result = fetchqueuedefinitions()
     print(result)
     result = fetchsessions()
     print(result)
-
     result = fetchqueueitems()
     print(result)
+    """
+
 
     print(result)
 """

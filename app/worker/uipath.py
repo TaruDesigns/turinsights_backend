@@ -36,7 +36,7 @@ from app.core.uipapiconfig import (
 from app.crud.base import CRUDBase
 from app.db.session import get_db, get_db_async
 
-executor = ThreadPoolExecutor(max_workers=20)
+executor = ThreadPoolExecutor(max_workers=1)
 
 
 async def _CRUDHelper_async(

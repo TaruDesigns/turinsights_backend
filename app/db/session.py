@@ -4,16 +4,17 @@ from typing import Generator
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
 engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, pool_pre_ping=True)  # type: ignore
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
+# poolclass NullPool is CRITICAL to avoid really weird asyncio errors that can't be debugged
 async_engine = create_async_engine(
-    settings.SQLALCHEMY_DATABASE_URI_ASYNC,
-    pool_pre_ping=True,
-    echo=False,
+    settings.SQLALCHEMY_DATABASE_URI_ASYNC, pool_pre_ping=True, echo=False, poolclass=NullPool
 )
 AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -46,6 +47,7 @@ async def get_db_async():
             await session.rollback()  # Rollback in case of exception
             raise
         finally:
+            await session.close()
             # No need to explicitly close, it's managed by async context
             pass
 
