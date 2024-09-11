@@ -146,8 +146,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         json_data = self.parse_and_replace_datetimes(obj_in_data)
         db_obj = self.model(**json_data)  # type: ignore
         try:
-            await db.merge(db_obj)
-            await db.commit()
+            async with db.begin():
+                await db.merge(db_obj)
+                await db.commit()
             return db_obj
         except IntegrityError as e:
             await db.rollback()  # Let the context manager do the rollback

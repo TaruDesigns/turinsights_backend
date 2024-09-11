@@ -33,8 +33,8 @@ if __name__ == "__main__":
     # result = fetchprocesses()
     # result = fetchqueuedefinitions()
     # result = fetchsessions()
-    # result = fetchqueueitems()
-    result = fetchqueueitemevents()
+    result = fetchqueueitems()
+    # result = fetchqueueitemevents()
 
     # from app.schedules.scheduler import refresh_jobsunfinished
     # asyncio.run(refresh_jobsunfinished())

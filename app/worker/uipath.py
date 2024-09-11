@@ -34,7 +34,7 @@ from app.core.uipapiconfig import (
     uipclient_sessions,
 )
 from app.crud.base import CRUDBase
-from app.db.session import get_db, get_db_async
+from app.db.session import get_db, get_db_async, get_db_async_pool
 
 executor = ThreadPoolExecutor(max_workers=20)
 
@@ -47,33 +47,23 @@ async def _CRUDHelper_async(
     """CRUD Helper to reuse in other functions asynchronously.
     Note, because it's async, each threadpool will get its own db session.
     Performance wise it seems it's not worth it"""
-    with get_db() as db:
-        _CRUDHelper(obj_in=obj_in, crudobject=crudobject, upsert=upsert, db=db)
+    # logger.debug("DB Sync")
+    # with get_db() as db:
+    #    _CRUDHelper(obj_in=obj_in, crudobject=crudobject, upsert=upsert, db=db)
     # return
 
-    logger.debug("DB Async")
+    logger.debug("CRUDHelper Async")
 
     async def process_object(obj):
         # Helper to run in threadpool
-        async with get_db_async() as db:
+        async with get_db_async_pool() as db:
             if upsert:
                 return await crudobject.upsert_async(db=db, obj_in=obj)
             else:
                 return await crudobject.create_safe_async(db=db, obj_in=obj)
 
     tasks = [process_object(ob) for ob in obj_in]
-
-    # Split on batches to avoid creating too many DB connections
-    batch_size = 5
-    if len(tasks) > batch_size:  # TODO set it based on max client connections from env
-        batches = [tasks[i : i + batch_size] for i in range(0, len(tasks), batch_size)]
-        results = []
-        for i, batch in enumerate(batches):
-            logger.debug(f"DB CRUD Batch {i}")
-            partials = await asyncio.gather(*batch)
-            results.extend(partials)
-    else:
-        results = await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks)
     return results
 
 
@@ -885,7 +875,9 @@ async def fetch_queue_item_events_async(
     if results:
         # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
         # sync_events_to_items(queueitemevents=results)  # TODO: Make this Async
+        logger.info("Syncing queue items before inserting events")
         await sync_events_to_items_async(queueitemevents=results)  # TODO: Make this Async
+        logger.info("Queue items synced, ready to insert events")
         try:
             crudobject = crud.uip_queue_item_event
             await _CRUDHelper_async(obj_in=results, crudobject=crudobject, upsert=upsert)
@@ -902,7 +894,7 @@ async def fetch_queue_item_events_async(
 def sync_events_to_items(
     queueitemevents: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse],
 ):
-    """This function syncs the queueitemevents to the state in the DB The business logic is:
+    """DEPRECATED/BROKEN This function syncs the queueitemevents to the state in the DB The business logic is:
         - If the item is NOT in the database, it needs to be inserted.
             In order to do that, we retrieve its full data (API -> GetQueueItem) and upsert
         - If the item IS in the database, we retrieve the latest data,
@@ -929,13 +921,17 @@ def sync_events_to_items(
     if ids_not_in_db:
         logger.info("Getting new queue items")
         filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
-        fetchqueueitems(upsert=False, fulldata=True, filter=filter)  # TODO: This might break
+        fetchqueueitems(
+            upsert=False, fulldata=True, filter=filter, run_until_complete=True
+        )  # TODO: This is broken now that this function just runs an asyncio loop
         logger.info("New queue items added")
     if existing_ids:
         # Update
         logger.info("Updating items")
         filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
-        fetchqueueitems(upsert=True, fulldata=False, filter=filter)  # TODO: This might break
+        fetchqueueitems(
+            upsert=True, fulldata=False, filter=filter, run_until_complete=True
+        )  # TODO: TThis is broken now that this function just runs an asyncio loop
         logger.info("Items updated")
 
 
@@ -970,16 +966,13 @@ async def sync_events_to_items_async(
     if ids_not_in_db:
         logger.info("Getting new queue items")
         filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
-        # fetchqueueitems(upsert=False, fulldata=True, filter=filter)  # TODO: This might break
-        # tasks.append(fetch_queue_item_events_async(upsert=True, fulldata=False, filter=filter))
+        tasks.append(fetch_queue_items_async(upsert=True, fulldata=False, filter=filter))
         logger.info("New queue items added")
     if existing_ids:
         # Update
         logger.info("Updating items")
         filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
-        # fetchqueueitems(upsert=True, fulldata=False, filter=filter)  # TODO: This might brea
-        tasks.append(fetch_queue_item_events_async(upsert=True, fulldata=False, filter=filter))
-        # await fetch_queue_item_events_async(upsert=True, fulldata=False, filter=filter)
+        tasks.append(fetch_queue_items_async(upsert=True, fulldata=False, filter=filter))
         logger.info("Items updated")
     await asyncio.gather(*tasks)
 
