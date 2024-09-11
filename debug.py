@@ -16,6 +16,7 @@ if __name__ == "__main__":
     from app.crud import uip_job
     from app.db.session import get_db
     from app.worker.uipath import (
+        OLDEVENTS,
         FetchUIPathToken,
         fetchfolders,
         fetchjobs,
@@ -33,8 +34,17 @@ if __name__ == "__main__":
     # result = fetchprocesses()
     # result = fetchqueuedefinitions()
     # result = fetchsessions()
-    result = fetchqueueitems()
+    # result = fetchqueueitems()
+    # results = OLDEVENTS(synctimes=True)
+    # result = fetchjobs(synctimes=True)
     # result = fetchqueueitemevents()
+    result = fetchqueueitemevents(
+        synctimes=True,
+        fulldata=True,
+        upsert=True,
+        filter=None,
+        folderlist=[2440043, 4572437, 4572438, 4572440, 4572441, 4602674],
+    )
 
     # from app.schedules.scheduler import refresh_jobsunfinished
     # asyncio.run(refresh_jobsunfinished())

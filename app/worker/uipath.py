@@ -798,6 +798,7 @@ async def fetch_queue_item_events_async(
             filter = f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
     results = []
+    logger.debug(f"QItemEvent Filter: {filter}")
 
     async def fetch_from_folder(folder, top, skip):
         try:
@@ -833,7 +834,7 @@ async def fetch_queue_item_events_async(
             queueitems_result = await asyncio.get_running_loop().run_in_executor(
                 executor,
                 functools.partial(
-                    uipclient_queueuitems.queue_items_get,
+                    uipclient_queueuitemevents.queue_item_events_get,
                     select="Id",
                     filter=filter,
                     count="true",
@@ -874,9 +875,8 @@ async def fetch_queue_item_events_async(
     # ---Special QItem Event Login
     if results:
         # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
-        # sync_events_to_items(queueitemevents=results)  # TODO: Make this Async
         logger.info("Syncing queue items before inserting events")
-        await sync_events_to_items_async(queueitemevents=results)  # TODO: Make this Async
+        await sync_events_to_items_async(queueitemevents=results)
         logger.info("Queue items synced, ready to insert events")
         try:
             crudobject = crud.uip_queue_item_event
