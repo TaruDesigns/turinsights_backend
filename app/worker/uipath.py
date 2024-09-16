@@ -34,9 +34,9 @@ from app.core.uipapiconfig import (
     uipclient_sessions,
 )
 from app.crud.base import CRUDBase
-from app.db.session import get_db, get_db_async, get_db_async_pool
+from app.db.session import get_db, get_db_async_pool
 
-executor = ThreadPoolExecutor(max_workers=20)
+executor = ThreadPoolExecutor(max_workers=settings.EXECUTOR_MAX_THREADS)
 
 
 async def _CRUDHelper_async(
@@ -45,8 +45,8 @@ async def _CRUDHelper_async(
     upsert: bool = True,
 ):
     """CRUD Helper to reuse in other functions asynchronously.
-    Note, because it's async, each threadpool will get its own db session.
-    Performance wise it seems it's not worth it"""
+    Note, because it's async, each threadpool will get its own db session from the common pool.
+    """
     # logger.debug("DB Sync")
     # with get_db() as db:
     #    _CRUDHelper(obj_in=obj_in, crudobject=crudobject, upsert=upsert, db=db)
@@ -104,7 +104,6 @@ def _APIResToList(response, objSchema):
 def _APIResToListQueueItem(response, objSchema):
     """Helper function to make a list of pydantic models from API Response
     QueueItems have a slightly different approach because they have embedded schemas
-    #TODO expand ProcessingExceptioonReason and Details?
 
     Args:
         response (_type_): API Client Response
@@ -145,7 +144,14 @@ def _FolderChecker(folders: list[int] | None, db: Session | None = None):
 
 
 def validate_or_default_folderlist(folderlist: list[int] | None) -> list[int]:
-    # Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder
+    """Helper function to avoid having to set the folderlist everytime and just assume you want to get every folder, or validate the specified folder list
+
+    Args:
+        folderlist (list[int] | None): _description_
+
+    Returns:
+        list[int]: list of folders
+    """
     if not folderlist or folderlist == [0]:
         with get_db() as db:
             default_folderlist = crud.uip_folder.get_multi(db=db, skip=0, limit=100)
@@ -225,7 +231,7 @@ def fetchfolders(upsert: bool = True, fulldata: bool = True) -> Any:
     except Exception as e:
         logger.error(f"Error when updating database: Folders: {e}")
         raise e
-    logger.info("Folders refreshed")
+    logger.info("Folders fetched")
     return folderlist
 
 
@@ -286,7 +292,7 @@ async def fetch_jobs_async(
                 ),
             )
             # Wait for result completion
-            jobs_response = jobs_result.get()
+            jobs_response = jobs_result.get()  # type: ignore
             # Process response and map it to QueueItems schema
             jobs = _APIResToList(response=jobs_response, objSchema=objSchema)
             return jobs
@@ -311,8 +317,8 @@ async def fetch_jobs_async(
                 ),
             )
             # Wait for result completion
-            jobs_response = jobs_result.get()
-            totalcount: int = jobs_response[1]
+            jobs_response = jobs_result.get()  # type: ignore
+            totalcount: int = jobs_response[1]  # type: ignore
 
             logger.debug(f"Count for folder {folder} : {totalcount}")
             return (folder, totalcount)
@@ -326,7 +332,7 @@ async def fetch_jobs_async(
     foldercount_results = await asyncio.gather(*tasks)
     # Gather results from all folders in parallel with batches of 100 max for each folder
     logger.info(f"Refreshing Jobs for folders: {folderlist}")
-    batchsize = 1000  # More or less imposed by uipath api limits == top
+    batchsize = settings.MAX_APIREQUEST_GET  # More or less imposed by uipath api limits == top
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
@@ -348,8 +354,7 @@ async def fetch_jobs_async(
         logger.error(f"Error when updating database: Jobs: {e}")
         raise e
 
-    logger.info("Jobs refreshed")
-
+    logger.info("Jobs fetched")
     if synctimes:
         crud.tracked_synctimes.update_jobsstarted(db=db, newtime=task_sync_time)
         logger.info(f"Jobs Info Successfully synced: '{filter}'")
@@ -421,7 +426,7 @@ async def fetch_processes_async(
                 ),
             )
             # Wait for result completion
-            releases_response = releases_result.get()
+            releases_response = releases_result.get()  # type: ignore
             # Process response and map it to Processes schema
             releases = _APIResToList(response=releases_response, objSchema=objSchema)
             return releases
@@ -446,8 +451,8 @@ async def fetch_processes_async(
                 ),
             )
             # Wait for result completion
-            releases_response = releases_result.get()
-            totalcount: int = releases_response[1]
+            releases_response = releases_result.get()  # type: ignore
+            totalcount: int = releases_response[1]  # type: ignore
 
             logger.debug(f"Count for folder {folder} : {totalcount}")
             return (folder, totalcount)
@@ -461,7 +466,7 @@ async def fetch_processes_async(
     foldercount_results = await asyncio.gather(*tasks)
     # Gather results from all folders in parallel with batches of 100 max for each folder
     logger.info(f"Refreshing Releases for folders: {folderlist}")
-    batchsize = 1000  # More or less imposed by uipath api limits == top
+    batchsize = settings.MAX_APIREQUEST_GET  # More or less imposed by uipath api limits == top
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
@@ -483,7 +488,7 @@ async def fetch_processes_async(
         logger.error(f"Error when updating database: Processes: {e}")
         raise e
 
-    logger.info("Processes refreshed")
+    logger.info("Processes fetched")
     return results
 
 
@@ -552,7 +557,7 @@ async def fetch_queuedefinitions_async(
                 ),
             )
             # Wait for result completion
-            queue_definitions_response = queue_definitions_result.get()
+            queue_definitions_response = queue_definitions_result.get()  # type: ignore
             # Process response and map it to Process schema
             queue_definitions = _APIResToList(response=queue_definitions_response, objSchema=objSchema)
             return queue_definitions
@@ -577,8 +582,8 @@ async def fetch_queuedefinitions_async(
                 ),
             )
             # Wait for result completion
-            queue_definitions_response = queue_definitions_result.get()
-            totalcount: int = queue_definitions_response[1]
+            queue_definitions_response = queue_definitions_result.get()  # type: ignore
+            totalcount: int = queue_definitions_response[1]  # type: ignore
 
             logger.debug(f"Count for folder {folder} : {totalcount}")
             return (folder, totalcount)
@@ -592,7 +597,7 @@ async def fetch_queuedefinitions_async(
     foldercount_results = await asyncio.gather(*tasks)
     # Gather results from all folders in parallel with batches of 100 max for each folder
     logger.info(f"Refreshing Queue Definitions for folders: {folderlist}")
-    batchsize = 1000  # More or less imposed by uipath api limits == top
+    batchsize = settings.MAX_APIREQUEST_GET  # More or less imposed by uipath api limits == top
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
@@ -614,7 +619,7 @@ async def fetch_queuedefinitions_async(
         logger.error(f"Error when updating database: Queue Definitoins: {e}")
         raise e
 
-    logger.info("Queue Definitions refreshed")
+    logger.info("Queue Definitions fetched")
     return results
 
 
@@ -684,7 +689,7 @@ async def fetch_queue_items_async(
                 ),
             )
             # Wait for result completion
-            queueitems_response = queueitems_result.get()
+            queueitems_response = queueitems_result.get()  # type: ignore
             # Process response and map it to QueueItems schema
             queueitems = _APIResToListQueueItem(response=queueitems_response, objSchema=objSchema)
             return queueitems
@@ -709,8 +714,8 @@ async def fetch_queue_items_async(
                 ),
             )
             # Wait for result completion
-            queueitems_response = queueitems_result.get()
-            totalcount: int = queueitems_response[1]
+            queueitems_response = queueitems_result.get()  # type: ignore
+            totalcount: int = queueitems_response[1]  # type: ignore
 
             logger.debug(f"Count for folder {folder} : {totalcount}")
             return (folder, totalcount)
@@ -724,7 +729,7 @@ async def fetch_queue_items_async(
     foldercount_results = await asyncio.gather(*tasks)
     # Gather results from all folders in parallel with batches of 100 max for each folder
     logger.info(f"Refreshing qitems for folders: {folderlist}")
-    batchsize = 100  # More or less imposed by uipath api limits == top
+    batchsize = settings.MAX_QUEUEITEM_GET  # More or less imposed by uipath api limits == top
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
@@ -745,7 +750,7 @@ async def fetch_queue_items_async(
         logger.error(f"Error when updating database: QueueItems: {e}")
         raise e
 
-    logger.info("Queue Items refreshed")
+    logger.info("Queue Items fetched")
 
     if synctimes:
         crud.tracked_synctimes.update_queueitemnew(db=db, newtime=task_sync_time)
@@ -818,7 +823,7 @@ async def fetch_queue_item_events_async(
                 ),
             )
             # Wait for result completion
-            queueitems_response = queueitems_result.get()
+            queueitems_response = queueitems_result.get()  # type: ignore
             # Process response and map it to QueueItemEvents schema
             queueitems = _APIResToList(response=queueitems_response, objSchema=objSchema)
             return queueitems
@@ -843,8 +848,8 @@ async def fetch_queue_item_events_async(
                 ),
             )
             # Wait for result completion
-            queueitems_response = queueitems_result.get()
-            totalcount: int = queueitems_response[1]
+            queueitems_response = queueitems_result.get()  # type: ignore
+            totalcount: int = queueitems_response[1]  # type: ignore
 
             logger.debug(f"Count for folder {folder} : {totalcount}")
             return (folder, totalcount)
@@ -858,7 +863,7 @@ async def fetch_queue_item_events_async(
     foldercount_results = await asyncio.gather(*tasks)
     # Gather results from all folders in parallel with batches of 100 max for each folder
     logger.info(f"Refreshing QItem Events for folders: {folderlist}")
-    batchsize = 1000  # More or less imposed by uipath api limits == top
+    batchsize = settings.MAX_APIREQUEST_GET  # More or less imposed by uipath api limits == top
     top = batchsize
     tasks = []
     for folder, count in foldercount_results:
@@ -876,7 +881,7 @@ async def fetch_queue_item_events_async(
     if results:
         # IMPORTANT: Before inserting events, it is mandatory that the item exists in the database (Foreign key)
         logger.info("Syncing queue items before inserting events")
-        await sync_events_to_items_async(queueitemevents=results)
+        await _sync_events_to_items_async(queueitemevents=results)
         logger.info("Queue items synced, ready to insert events")
         try:
             crudobject = crud.uip_queue_item_event
@@ -884,58 +889,14 @@ async def fetch_queue_item_events_async(
         except Exception as e:
             logger.error(f"Error when updating database: QueueItemEvents: {e}")
             raise e
-    logger.info("Queue Item event refreshed")
+    logger.info("Queue Item event fetched")
     if synctimes:
         crud.tracked_synctimes.update_queueitemevent(db=db, newtime=task_sync_time)
         logger.info(f"Queue Items Event Info Succesfully synced: '{filter}'")
     return results
 
 
-def sync_events_to_items(
-    queueitemevents: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse],
-):
-    """DEPRECATED/BROKEN This function syncs the queueitemevents to the state in the DB The business logic is:
-        - If the item is NOT in the database, it needs to be inserted.
-            In order to do that, we retrieve its full data (API -> GetQueueItem) and upsert
-        - If the item IS in the database, we retrieve the latest data,
-            selecting so we only get the data we need from the API for performance (no fulldata)
-        Note that in order to update the QueueItemData we don't actually hit the database for each and every QueueItemEvent
-        because we only care about the latest data.
-        We also don't care if the item is in its final state (eg, multiple Events)
-            but the Database never saw it (eg the QueueItemId is not found)
-            because we will just get the fulldata (including its final state) anyway
-        But we have previously inserted ALL the QueueItemEvents in its table.
-
-        #TODO: This could in theory be another celery task, but one that is ONLY launched after retrieving Events.
-
-    Args:
-        queueitemevents (schemas.QueueItemEventGETResponse, optional): _description_. Defaults to None.
-    """
-
-    #
-    unique_qitem_ids = list(set(item.QueueItemId for item in queueitemevents))
-    with get_db() as db:
-        # Split queueitemevents into two buckets: One for items that are not in DB and one that are in DB (based on QueueItemId)
-        existing_ids, ids_not_in_db = crud.uip_queue_item.get_by_id_list_split(db=db, ids=unique_qitem_ids)
-        # Get New
-    if ids_not_in_db:
-        logger.info("Getting new queue items")
-        filter = f"Id in ({', '.join(str(x) for x in ids_not_in_db)})"
-        fetchqueueitems(
-            upsert=False, fulldata=True, filter=filter, run_until_complete=True
-        )  # TODO: This is broken now that this function just runs an asyncio loop
-        logger.info("New queue items added")
-    if existing_ids:
-        # Update
-        logger.info("Updating items")
-        filter = f"Id in ({', '.join(str(x) for x in existing_ids)})"
-        fetchqueueitems(
-            upsert=True, fulldata=False, filter=filter, run_until_complete=True
-        )  # TODO: TThis is broken now that this function just runs an asyncio loop
-        logger.info("Items updated")
-
-
-async def sync_events_to_items_async(
+async def _sync_events_to_items_async(
     queueitemevents: list[schemas.QueueItemEventGETResponseExtended | schemas.QueueItemEventGETResponse],
 ):
     """This function syncs the queueitemevents to the state in the DB The business logic is:
@@ -1032,5 +993,5 @@ def fetchsessions(upsert: bool = True, fulldata: bool = True, filter: str | None
         except Exception as e:
             logger.error(f"Error when updating database: Sessions: {e}")
             raise e
-    logger.info("sessions refreshed")
+    logger.info("sessions fetched")
     return sessions

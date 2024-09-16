@@ -11,6 +11,10 @@ from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 
+# We have two different engines because one is sync while the other is async.
+# The async engine uses a special connection pool with round robin assignment to avoid creating multiple sessions that would degrade performance
+# or run the risk of hitting max connections. The default pool DOES NOT avoid this limit issue or has concurrency errors.
+
 engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, pool_pre_ping=True)  # type: ignore
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -21,12 +25,9 @@ async_engine = create_async_engine(
 )
 AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
-# Connection pool size
-POOL_SIZE = 10  # TODO: Set by .env
-
 
 class ConnectionPool:
-    # Async connection pool with round robin assignment.
+    # Async connection pool with round robin assignment using asyncpg.
     def __init__(self, pool_size: int):
         self.pool_size = pool_size
         self.lock = asyncio.Lock()  # Ensure async-safe access
@@ -67,7 +68,7 @@ class ConnectionPool:
 
 
 # Create a connection pool object
-db_pool = ConnectionPool(pool_size=POOL_SIZE)
+db_pool = ConnectionPool(pool_size=settings.MAX_DB_CONNECTIONS)
 
 
 @asynccontextmanager
