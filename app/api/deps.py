@@ -1,6 +1,3 @@
-from contextlib import AbstractContextManager
-from typing import Generator
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt
@@ -9,27 +6,17 @@ from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
 from app.core.config import settings
-from app.db.session import SessionLocal
 from app.db.session import get_db_depends as get_db
+from app.schedules.scheduler import scheduler
 
 reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/oauth")
 
 
 # This class is only used for APScheduler since get_db is a generator and APScheduler doesn't like generators
-class DBContext(AbstractContextManager):
-    def __enter__(self):
-        self.db = SessionLocal()
-        return self.db
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        if exc_type is not None:
-            self.db.rollback()
-            self.db.close()
-            # Return True to suppress any exceptions
-            return True
-        self.db.close()
-        # Return False to propagate exceptions
-        return False
+
+def get_scheduler():
+    return scheduler
 
 
 def get_token_payload(token: str) -> schemas.TokenPayload:
@@ -44,9 +31,7 @@ def get_token_payload(token: str) -> schemas.TokenPayload:
     return token_data
 
 
-def get_current_user(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
-) -> models.User:
+def get_current_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> models.User:
     token_data = get_token_payload(token)
     if token_data.refresh or token_data.totp:
         # Refresh token is not a valid access token and TOTP True can only be used to validate TOTP
@@ -60,9 +45,7 @@ def get_current_user(
     return user
 
 
-def get_totp_user(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
-) -> models.User:
+def get_totp_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> models.User:
     token_data = get_token_payload(token)
     if token_data.refresh or not token_data.totp:
         # Refresh token is not a valid access token and TOTP False cannot be used to validate TOTP
@@ -88,9 +71,7 @@ def get_magic_token(token: str = Depends(reusable_oauth2)) -> schemas.MagicToken
     return token_data
 
 
-def get_refresh_user(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
-) -> models.User:
+def get_refresh_user(db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)) -> models.User:
     token_data = get_token_payload(token)
     if not token_data.refresh:
         # Access token is not a valid refresh token
@@ -126,9 +107,7 @@ def get_current_active_superuser(
     current_user: models.User = Depends(get_current_user),
 ) -> models.User:
     if not crud.user.is_superuser(current_user):
-        raise HTTPException(
-            status_code=400, detail="The user doesn't have enough privileges"
-        )
+        raise HTTPException(status_code=400, detail="The user doesn't have enough privileges")
     return current_user
 
 

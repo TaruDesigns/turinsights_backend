@@ -47,13 +47,14 @@ async def redirect_typer():
     return RedirectResponse("/docs")
 
 
+"""
 @app.on_event("startup")
 async def startscheduler():
     logger.info("Starting scheduler...")
-    scheduler.start()
     start_basic_schedules()
+    scheduler.resume()
     logger.info("Schedule started")
-
+"""
 
 if __name__ == "__main__":
     import uvicorn

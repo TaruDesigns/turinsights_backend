@@ -1,6 +1,6 @@
 import asyncio
 from collections import deque
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AbstractContextManager, asynccontextmanager, contextmanager
 from typing import Generator
 
 from loguru import logger
@@ -24,6 +24,22 @@ async_engine = create_async_engine(
     settings.SQLALCHEMY_DATABASE_URI_ASYNC, pool_pre_ping=True, echo=False, poolclass=NullPool
 )
 AsyncSessionLocal = sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
+
+
+class DBContext(AbstractContextManager):
+    def __enter__(self):
+        self.db = SessionLocal()
+        return self.db
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            self.db.rollback()
+            self.db.close()
+            # Return True to suppress any exceptions
+            return True
+        self.db.close()
+        # Return False to propagate exceptions
+        return False
 
 
 class ConnectionPool:
