@@ -131,5 +131,10 @@ class Settings(BaseSettings):
 
     BROKER_CONNECTION_STRING: str = "amqp://guest@queue//"
 
+    MAX_DB_CONNECTIONS: int = 20
+    MAX_QUEUEITEM_GET: int = 100
+    MAX_APIREQUEST_GET: int = 1000
+    EXECUTOR_MAX_THREADS: int = 20
+
 
 settings = Settings()  # type: ignore it's filled in runtime with envs
