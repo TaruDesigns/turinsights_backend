@@ -6,7 +6,7 @@ from uipath_orchestrator_rest.rest import ApiException
 
 import app.worker.uipath as uipathtasks
 from app import crud, schemas
-from app.worker.uipath import get_db
+from app.db.session import get_db
 
 router = APIRouter()
 
@@ -30,7 +30,6 @@ def fetchfolders(
     try:
         # Gets folders.
         kwargs = {"fulldata": formdata.fulldata, "upsert": formdata.upsert}
-        # celery_app.send_task("app.worker.uipath.fetchfolders", kwargs=kwargs)
         uipathtasks.fetchfolders.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling FoldersApi->folders_get: {e.body}")
@@ -75,7 +74,6 @@ def fetchjobs(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        # celery_app.send_task("app.worker.uipath.fetchjobs", kwargs=kwargs)
         uipathtasks.fetchjobs.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling JobsAPI->jobs_get: {e.body}")
@@ -110,7 +108,6 @@ def fetchprocesses(
             "filter": formdata.filter,
             "folderlist": folderlist,
         }
-        # celery_app.send_task("app.worker.uipath.fetchprocesses", kwargs=kwargs)
         uipathtasks.fetchprocesses.apply_async(kwargs=kwargs)
     except ApiException as e:
         logger.error(f"Exception when calling ReleasesAPI->releases_get: {e.body}")

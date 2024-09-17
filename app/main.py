@@ -1,6 +1,7 @@
 from time import sleep
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
 
@@ -8,6 +9,7 @@ from app.api.api_v1.mainrouter import api_router
 
 # For startup
 from app.core.config import settings
+from app.frontend.mainrouter import front_router
 
 from .schedules.scheduler import scheduler, start_basic_schedules
 
@@ -26,6 +28,8 @@ app = FastAPI(
     debug=settings.DEBUG_MODE,
 )
 
+app.mount("/static", StaticFiles(directory="./app/static"), name="static")
+
 # Set all CORS enabled origins
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
@@ -37,23 +41,17 @@ if settings.BACKEND_CORS_ORIGINS:
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(front_router, prefix="")
 
 
-from fastapi.responses import RedirectResponse
-
-
-@app.get("/")
-async def redirect_typer():
-    return RedirectResponse("/docs")
-
-
+"""
 @app.on_event("startup")
 async def startscheduler():
     logger.info("Starting scheduler...")
-    scheduler.start()
     start_basic_schedules()
+    scheduler.resume()
     logger.info("Schedule started")
-
+"""
 
 if __name__ == "__main__":
     import uvicorn

@@ -7,7 +7,7 @@ load_dotenv()
 
 if __name__ == "__main__":
     # Debug whole app
-
+    """
     from app.worker.uipath import (
         FetchUIPathToken,
         fetchfolders,
@@ -28,3 +28,15 @@ if __name__ == "__main__":
     result = fetchqueueitems()
     result = fetchjobs(synctimes=True)
     result = fetchqueueitemevents()
+"""
+    import uvicorn
+
+    from app.main import app
+    from app.schedules import scheduler
+
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+
+    # scheduler.scheduler.start(paused=True)
+    # jobs = scheduler.scheduler.get_jobs()
+
+    print("")

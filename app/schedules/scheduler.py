@@ -9,9 +9,9 @@ from loguru import logger
 from pydantic import BaseModel, field_validator
 
 import app.worker.uipath as uipathtasks
-from app.api.deps import DBContext
 from app.core.config import settings
 from app.crud import uip_folder, uip_job
+from app.db.session import DBContext
 
 jobstore = JobStore(url=settings.SQLALCHEMY_DATABASE_URI)
 scheduler = Scheduler(jobstores={"default": jobstore})
@@ -129,7 +129,7 @@ class Schedule(BaseModel):
 
 
 # Main Schedules dict.
-schedules = {
+main_schedules = {
     "main_uip_token_refresh": Schedule(seconds=150, taskid="main_uip_token_refresh", taskfunction=refresh_token),
     "main_folder_refresh": Schedule(seconds=300, taskid="main_folder_refresh", taskfunction=refresh_folders),
     "main_sessions_refresh": Schedule(seconds=300, taskid="main_sessions_refresh", taskfunction=refresh_sessions),
@@ -146,7 +146,7 @@ schedules = {
 }
 
 
-def start_basic_schedules(schedules: dict[str, Schedule] = schedules):
+def start_basic_schedules(schedules: dict[str, Schedule] = main_schedules):
     """Starts the schedules indicated in the argument
 
     Args:
@@ -156,5 +156,8 @@ def start_basic_schedules(schedules: dict[str, Schedule] = schedules):
     for key, val in schedules.items():
         if not scheduler.get_job(val.taskid):
             logger.info(f"Adding task: {val.taskid}")
-            scheduler.add_job(val.taskfunction, "interval", seconds=val.seconds, id=val.taskid)
+            scheduler.add_job(val.taskfunction, "interval", seconds=val.seconds, id=val.taskid, jobstore="default")
     logger.info("Main schedules checked")
+
+
+scheduler.start(paused=True)
