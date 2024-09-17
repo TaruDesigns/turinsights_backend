@@ -63,20 +63,30 @@ def getschedulebyid(id: str, scheduler=Depends(deps.get_scheduler)) -> JobSchema
 
 
 @router.patch("/schedule/{id}", response_model=None, status_code=201)
-def updateschedule(id: str, interval: float, scheduler=Depends(deps.get_scheduler)) -> None:
+def updateschedule(id: str, interval: float, scheduler=Depends(deps.get_scheduler)):
     # Get schedule based on id in the path and update its interval (in seconds)
     job = scheduler.get_job(id)
     if job is None:
         raise HTTPException(status_code=404, detail="Invalid ID, job doesn't exist")
     scheduler.reschedule_job(id=id, trigger="interval", seconds=interval)
+    return {"detail": "ok"}
 
 
-"""
-@router.post("/schedule", response_model=None, status_code=201)
-def postschedule(id: str, interval: float, scheduler=Depends(deps.get_scheduler())) -> None:
+@router.patch("/schedule/{id}/resume", response_model=None, status_code=201)
+def enablejob(id: str, scheduler=Depends(deps.get_scheduler)):
     # Get schedule based on id in the path and update its interval (in seconds)
-    job = scheduler.get_job(id=id)
+    job = scheduler.get_job(id)
     if job is None:
-        raise ValueError("Invalid ID, job doesn't exist")
-    scheduler.reschedule_job(id=id, trigger='interval', seconds=interval)
-"""
+        raise HTTPException(status_code=404, detail="Invalid ID, job doesn't exist")
+    job.resume()
+    return {"detail": "ok"}
+
+
+@router.patch("/schedule/{id}/pause", response_model=None, status_code=201)
+def pausejob(id: str, scheduler=Depends(deps.get_scheduler)):
+    # Get schedule based on id in the path and update its interval (in seconds)
+    job = scheduler.get_job(id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Invalid ID, job doesn't exist")
+    job.pause()
+    return {"detail": "ok"}
