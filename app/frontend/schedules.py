@@ -2,7 +2,6 @@ import os
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
 router = APIRouter()
 

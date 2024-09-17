@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
+from apscheduler.schedulers.base import STATE_PAUSED, STATE_RUNNING, STATE_STOPPED
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -26,12 +27,14 @@ router = APIRouter()
 def resumescheduler(scheduler=Depends(deps.get_scheduler)):
     # Resume scheduler
     scheduler.resume()
+    return {"detail": "ok"}
 
 
 @router.post("/pause", response_model=None, status_code=201)
 def pausescheduler(scheduler=Depends(deps.get_scheduler)):
     # Resume scheduler
     scheduler.pause()
+    return {"detail": "ok"}
 
 
 @router.post("/reinit", response_model=None, status_code=201)
@@ -40,6 +43,16 @@ def reinit(scheduler=Depends(deps.get_scheduler)):
     scheduler.shutdown()
     schmodule.start_basic_schedules()
     scheduler.start()
+    return {"detail": "ok"}
+
+
+@router.get("/status", response_model=None, status_code=201)
+def getstatus(scheduler=Depends(deps.get_scheduler)) -> bool:
+    if scheduler.state == STATE_PAUSED:
+        schstatus = False
+    else:
+        schstatus = True
+    return schstatus
 
 
 @router.get("/schedules", response_model=None, status_code=200)
@@ -68,7 +81,7 @@ def updateschedule(id: str, interval: float, scheduler=Depends(deps.get_schedule
     job = scheduler.get_job(id)
     if job is None:
         raise HTTPException(status_code=404, detail="Invalid ID, job doesn't exist")
-    scheduler.reschedule_job(id=id, trigger="interval", seconds=interval)
+    scheduler.reschedule_job(job_id=id, trigger="interval", seconds=interval)
     return {"detail": "ok"}
 
 
