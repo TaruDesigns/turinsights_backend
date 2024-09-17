@@ -31,11 +31,17 @@ if __name__ == "__main__":
 """
     import uvicorn
 
+    from app.core.uipapiconfig import uipclient_folders
     from app.main import app
     from app.schedules import scheduler
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+    try:
+        res = uipclient_folders.folders_get()
+    except Exception as e:
+        print(e)
+        print("Test")
 
+    # uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
     # scheduler.scheduler.start(paused=True)
     # jobs = scheduler.scheduler.get_jobs()
 

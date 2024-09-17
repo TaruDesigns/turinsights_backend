@@ -59,8 +59,8 @@ class CRUDSyncTimes(
         try:
             timestamp = self.get(db=db, id=TrackingKeys.QueueItemEvents).TimeStamp
         except Exception as e:
-            logger.error(f"No Synctime found for QueueItemEvents, defaulting to MinTime")
-            timestamp = datetime.datetime(2016, 1, 1)
+            logger.error(f"No Synctime found for QueueItemEvents, defaulting to Now")
+            timestamp = datetime.datetime.now()
         return timestamp
 
     def update_queueitemevent(self, db: Session, newtime: datetime.datetime) -> None:
@@ -75,8 +75,8 @@ class CRUDSyncTimes(
         try:
             timestamp = self.get(db=db, id=TrackingKeys.QueueItemsNew).TimeStamp  # type: ignore
         except Exception as e:
-            logger.error(f"No Synctime found for QueueItemsNew, defaulting to MinTime")
-            timestamp = datetime.datetime(2016, 1, 1)
+            logger.error(f"No Synctime found for QueueItemsNew, defaulting to Now")
+            timestamp = datetime.datetime.now()
         return timestamp
 
     def update_queueitemnew(self, db: Session, newtime: datetime.datetime) -> None:
@@ -91,8 +91,8 @@ class CRUDSyncTimes(
         try:
             timestamp = self.get(db=db, id=TrackingKeys.JobsStarted).TimeStamp  # type: ignore
         except Exception as e:
-            logger.error(f"No Synctime found for Jobs Started, defaulting to MinTime")
-            timestamp = datetime.datetime(2016, 1, 1)
+            logger.error(f"No Synctime found for Jobs Started, defaulting to Now")
+            timestamp = datetime.datetime.now()
         return timestamp
 
     def update_jobsstarted(self, db: Session, newtime: datetime.datetime) -> None:

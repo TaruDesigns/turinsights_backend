@@ -312,6 +312,7 @@ async def fetch_jobs_async(
                     select="Id",
                     filter=filter,
                     count="true",
+                    top=1,
                     x_uipath_organization_unit_id=folder,
                     async_req=True,  # Ensuring async_req=True is passed correctly
                 ),
@@ -445,6 +446,7 @@ async def fetch_processes_async(
                     uipclient_processes.releases_get,
                     select="Id, ProcessKey, ProcessVersion, Name",
                     filter=filter,
+                    top=1,
                     count="true",
                     x_uipath_organization_unit_id=folder,
                     async_req=True,  # Ensuring async_req=True is passed correctly
@@ -577,6 +579,7 @@ async def fetch_queuedefinitions_async(
                     select="Id, Name",
                     filter=filter,
                     count="true",
+                    top=1,
                     x_uipath_organization_unit_id=folder,
                     async_req=True,  # Ensuring async_req=True is passed correctly
                 ),
@@ -709,6 +712,7 @@ async def fetch_queue_items_async(
                     select="Id",
                     filter=filter,
                     count="true",
+                    top=1,
                     x_uipath_organization_unit_id=folder,
                     async_req=True,  # Ensuring async_req=True is passed correctly
                 ),
@@ -799,7 +803,7 @@ async def fetch_queue_item_events_async(
 
     if synctimes:
         with get_db() as db:
-            lastsynctime = crud.tracked_synctimes.get_queueitemnew(db=db)
+            lastsynctime = crud.tracked_synctimes.get_queueitemevent(db=db)
             filter = f"Timestamp gt {lastsynctime.isoformat()}Z" if lastsynctime else None
             task_sync_time = datetime.now()
     results = []
@@ -843,6 +847,7 @@ async def fetch_queue_item_events_async(
                     select="Id",
                     filter=filter,
                     count="true",
+                    top=1,
                     x_uipath_organization_unit_id=folder,
                     async_req=True,  # Ensuring async_req=True is passed correctly
                 ),
